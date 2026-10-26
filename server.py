@@ -129,6 +129,8 @@ class Manager:
         self.history: deque[dict[str, object]] = deque(maxlen=240)
         self.raw: deque[dict[str, object]] = deque(maxlen=60)
         self.recorder = self._new_recorder()
+        self.session_active = False
+        self.session_paused = False
         self.last_session: dict[str, object] | None = None
         self.control: dict[str, object] = self._empty_control()
 
@@ -192,6 +194,41 @@ class Manager:
             calibration=self.calibration(),
             weight_kg=float(self.config["weight_kg"]),
         )
+
+    def _finalize_current_session(self) -> dict[str, object] | None:
+        """Write the open session to disk, if it has enough data."""
+        if not self.session_active and not self.recorder.samples:
+            return None
+        summary = self.recorder.finalize()
+        if summary:
+            self.last_session = summary
+        return summary
+
+    def _reset_workout_state(self) -> None:
+        self.active_workout = None
+        self._workout_status = "idle"
+        self._workout_started_at = 0.0
+        self._workout_paused_at = None
+        self._workout_paused_total = 0.0
+
+    def _close_session(self) -> dict[str, object] | None:
+        """Finalize the current session and leave the recorder idle."""
+        summary = self._finalize_current_session()
+        self._reset_workout_state()
+        self.recorder = self._new_recorder()
+        self.history.clear()
+        self.session_active = False
+        self.session_paused = False
+        return summary
+
+    def _begin_session(self) -> None:
+        """Finalize anything open and start a fresh recording session."""
+        self._finalize_current_session()
+        self._reset_workout_state()
+        self.recorder = self._new_recorder()
+        self.history.clear()
+        self.session_active = True
+        self.session_paused = False
 
     # -- lifecycle ---------------------------------------------------------
     def start_tick(self) -> None:
@@ -411,13 +448,18 @@ class Manager:
             cadence_rpm=fresh("cadence_rpm", 3.0),
         )
 
+    def _record_sample(self, metrics: Metrics) -> None:
+        """Append a sample only while the session is running."""
+        if self.session_active and not self.session_paused:
+            self.recorder.add(metrics)
+
     async def _tick_loop(self) -> None:
         while True:
             await asyncio.sleep(1.0)
             if self.status not in {"connected", "simulating"}:
                 continue
             metrics = self.effective_metrics()
-            self.recorder.add(metrics)
+            self._record_sample(metrics)
             point: dict[str, object] = {
                 "t": int(time.time()),
                 "p": round(metrics.power_w, 1),
@@ -445,7 +487,9 @@ class Manager:
             "calibration": self.calibration(),
             "error": self.error,
             "last_session": self.last_session,
-            "session_id": self.recorder.session_id,
+            "session_active": self.session_active,
+            "session_paused": self.session_paused,
+            "session_id": self.recorder.session_id if self.session_active else None,
             "source": self.sources.get("power_w"),
             "sources": dict(self.sources),
             "source_values": {
@@ -486,11 +530,7 @@ class Manager:
         if self.client:
             await self.client.disconnect()
 
-        summary = self.recorder.finalize()
-        if summary:
-            self.last_session = summary
-        self.recorder = self._new_recorder()
-        self.history.clear()
+        self._close_session()
         self.latest = Metrics()
         self.latest_at = 0.0
         self.sources.clear()
@@ -535,17 +575,11 @@ class Manager:
         self.latest = Metrics()
         self.latest_at = 0.0
         self.control = self._empty_control()
-        summary = self.recorder.finalize()
-        if summary:
-            self.last_session = summary
+        self._close_session()
 
     def reset_session(self) -> dict[str, object] | None:
-        summary = self.recorder.finalize()
-        if summary:
-            self.last_session = summary
-        self.recorder = self._new_recorder()
-        self.history.clear()
-        return summary
+        """Save the current session and leave the recorder stopped."""
+        return self._close_session()
 
     def update_config(
         self,
@@ -754,6 +788,18 @@ class Manager:
             self.stop_workout()
         save_workouts(WORKOUTS_FILE, self.workouts)
 
+    def start_session(self) -> dict[str, object]:
+        """Start a new free recording session without a workout."""
+        self._begin_session()
+        return self.snapshot()
+
+    def stop_session(self) -> dict[str, object]:
+        """Save the current session and leave the recorder stopped."""
+        summary = self._close_session()
+        state = self.snapshot()
+        state["stopped_session"] = summary
+        return state
+
     def start_workout(self, workout_id: str) -> dict[str, object]:
         workout = next(
             (
@@ -768,7 +814,7 @@ class Manager:
 
         # A structured workout is its own session.  Finalize whatever was
         # being recorded, then start clean so the summary matches the plan.
-        self.reset_session()
+        self._begin_session()
         self.active_workout = json.loads(json.dumps(workout))
         self.recorder.workout_laps = [
             {
@@ -791,6 +837,7 @@ class Manager:
         if self._workout_status == "running":
             self._workout_paused_at = time.time()
             self._workout_status = "paused"
+            self.session_paused = True
         return self.snapshot()
 
     def resume_workout(self) -> dict[str, object]:
@@ -800,15 +847,13 @@ class Manager:
             self._workout_paused_total += time.time() - self._workout_paused_at
             self._workout_paused_at = None
             self._workout_status = "running"
+            self.session_paused = False
+            self.recorder.resume_recording()
         return self.snapshot()
 
     def stop_workout(self) -> dict[str, object]:
-        self.active_workout = None
-        self._workout_status = "idle"
-        self._workout_started_at = 0.0
-        self._workout_paused_at = None
-        self._workout_paused_total = 0.0
-        return self.snapshot()
+        """Conclude the workout and save its session immediately."""
+        return self.stop_session()
 
     async def set_resistance(self, level: float) -> dict[str, object]:
         level = round(float(level), 1)
@@ -1132,6 +1177,14 @@ def create_app(args: argparse.Namespace) -> FastAPI:
     def stop_workout() -> dict[str, object]:
         return manager.stop_workout()
 
+    @app.post("/api/session/start")
+    def start_session() -> dict[str, object]:
+        return manager.start_session()
+
+    @app.post("/api/session/stop")
+    def stop_session() -> dict[str, object]:
+        return manager.stop_session()
+
     @app.post("/api/session/reset")
     def reset() -> dict[str, object]:
         summary = manager.reset_session()
@@ -1139,6 +1192,8 @@ def create_app(args: argparse.Namespace) -> FastAPI:
 
     @app.get("/api/export.csv")
     def export_csv() -> Response:
+        if not manager.session_active or not manager.recorder.samples:
+            raise HTTPException(status_code=409, detail="nessuna sessione attiva")
         filename = f"qubo-{manager.recorder.session_id}.csv"
         return Response(
             content=manager.recorder.to_csv(),
@@ -1148,8 +1203,8 @@ def create_app(args: argparse.Namespace) -> FastAPI:
 
     @app.get("/api/export.tcx")
     def export_tcx() -> Response:
-        if not manager.recorder.samples:
-            raise HTTPException(status_code=409, detail="nessun dato da esportare")
+        if not manager.session_active or not manager.recorder.samples:
+            raise HTTPException(status_code=409, detail="nessuna sessione attiva")
         filename = f"qubo-{manager.recorder.session_id}.tcx"
         return Response(
             content=manager.recorder.to_tcx(),

@@ -90,7 +90,7 @@ La dashboard mostra:
 - durata, distanza, media e massimo di potenza e velocità;
 - **controllo rullo**: slider resistenza `0-20` (passo `0.1`), preset
   `0 / 5 / 10 / 15 / 20` e target power ERG;
-- pannello **Allenamento** con libreria, avvio, pausa, ripresa e termine;
+- pannello **Allenamento** con libreria, avvio, pausa/ripresa e conclusione;
 - editor per creare, modificare ed eliminare allenamenti;
 - elenco delle attività salvate, scaricabili in **TCX** (pronto per Strava)
   oppure CSV;
@@ -121,9 +121,11 @@ continua ad aggiornarsi anche con la dashboard in secondo piano. Su browser
 senza Document Picture-in-Picture si apre una finestra separata.
 
 Le sessioni vengono scritte in `data/trainer_sessions/` (CSV + TCX + riepilogo
-JSON) quando premi **Nuova** o **Disconnetti**. Avviare un allenamento finalizza
-la sessione precedente e ne apre una nuova, così le statistiche partono da zero.
-Il CSV e il TCX della sessione in corso sono scaricabili in qualsiasi momento.
+JSON) quando premi **Concludi** o **Disconnetti**. Concludere salva la sessione
+e ferma la registrazione: non viene aperta automaticamente una nuova attività.
+Avviare un allenamento finalizza la sessione precedente e ne apre una nuova,
+così le statistiche partono da zero. Il CSV e il TCX della sessione in corso
+sono scaricabili in qualsiasi momento.
 
 Il **TCX** contiene sempre tutti i campioni registrati, dall'inizio alla fine
 della seduta, con un punto al secondo e tempo, distanza, velocità, potenza e
@@ -186,10 +188,12 @@ target con `nuova_FTP / 179` oppure modifica gli intervalli dalla dashboard.
    rimanente e il prossimo intervallo.
 3. Il grafico passa al **profilo target completo**; la linea arancione è la
    potenza reale recente e il marker verticale indica il punto attuale.
-4. **Pausa** ferma il cronometro e non registra nuovi campioni target;
-   **Riprendi** riparte dallo stesso punto.
-5. **Termina** chiude l'allenamento ma lascia aperta la sessione. La sessione
-   viene salvata con **Nuova** o **Disconnetti**.
+4. **Pausa** ferma il cronometro e la registrazione; **Riprendi** riparte dallo
+   stesso punto senza contare il tempo trascorso in pausa.
+5. **Concludi** salva subito la sessione (CSV, TCX e JSON), chiude l'allenamento
+   e lascia la registrazione ferma. Non parte una nuova attività.
+6. Per registrare un giro libero senza allenamento usa **Avvia sessione** nella
+   card **Sessione**; **Concludi** nella stessa card salva e chiude.
 
 Sotto la lista, **Note e istruzioni** mostra la guida dell'allenamento scelto:
 cosa fare, cadenza, resistenza di partenza, come sentirti e cosa mangiare
@@ -233,12 +237,16 @@ curl -X POST http://127.0.0.1:8000/api/workouts \
         {"label":"Recupero","duration_s":420,"power_w":200}
       ]}'
 
-# avvia, pausa, riprendi, termina
+# avvia, pausa, riprendi, concludi e salva
 curl -X POST http://127.0.0.1:8000/api/workout/start \
   -H 'Content-Type: application/json' -d '{"id":"vo2max-5x3"}'
 curl -X POST http://127.0.0.1:8000/api/workout/pause
 curl -X POST http://127.0.0.1:8000/api/workout/resume
 curl -X POST http://127.0.0.1:8000/api/workout/stop
+
+# sessione libera: avvia e concludi senza allenamento
+curl -X POST http://127.0.0.1:8000/api/session/start
+curl -X POST http://127.0.0.1:8000/api/session/stop
 
 # elimina
 curl -X DELETE http://127.0.0.1:8000/api/workouts/vo2max-10-7
@@ -512,8 +520,9 @@ curl -OJ http://127.0.0.1:8000/piano.md
 
 `/api/resistance` accetta `0-20`; `/api/erg` accetta `0-4000` W. Entrambi
 restituiscono lo snapshot completo, con lo stato `control` aggiornato. Gli
-endpoint per la libreria workout e per avvio/pausa/ripresa/termine sono
-documentati nella sezione 3.
+endpoint per la libreria workout e per avvio/pausa/ripresa/conclusione sono
+documentati nella sezione 3. `/api/session/start` e `/api/session/stop`
+gestiscono una sessione libera senza workout.
 
 Lo snapshot di `/api/state` include anche i campi di diagnostica usati dal
 pannello Debug BLE:

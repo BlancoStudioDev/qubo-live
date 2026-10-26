@@ -268,6 +268,8 @@ def tcx_from_csv(path: Path) -> str:
 class SessionRecorder:
     """Integrates live metrics into distance and averages, and stores samples."""
 
+    _reserved_ids: set[str] = set()
+
     def __init__(
         self,
         data_dir: Path,
@@ -284,7 +286,17 @@ class SessionRecorder:
 
     def reset(self) -> None:
         self.started_at = time.time()
-        self.session_id = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
+        base_id = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
+        session_id = base_id
+        suffix = 2
+        while session_id in SessionRecorder._reserved_ids or any(
+            (self.data_dir / f"{session_id}{extension}").exists()
+            for extension in (".csv", ".json", ".tcx")
+        ):
+            session_id = f"{base_id}-{suffix}"
+            suffix += 1
+        SessionRecorder._reserved_ids.add(session_id)
+        self.session_id = session_id
         self.elapsed_s = 0.0
         self.distance_m = 0.0
         self.max_power_w = 0.0
@@ -328,6 +340,10 @@ class SessionRecorder:
                 "distance_km": round(self.distance_m / 1000.0, 4),
             }
         )
+
+    def resume_recording(self) -> None:
+        """Restart the elapsed clock without counting a paused gap."""
+        self._last_monotonic = time.monotonic()
 
     def stats(self) -> dict[str, float]:
         duration = self.elapsed_s

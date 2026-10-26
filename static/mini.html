@@ -371,9 +371,16 @@
     }
     $("miniTarget").textContent = targetText;
     $("miniTarget2").textContent = targetText;
+    const workoutStatus = {
+      running: "in corso",
+      paused: "in pausa",
+      completed: "completato",
+    }[workout.status] || workout.status || "";
     $("miniWorkout").textContent = workout.active
-      ? `${workout.name || "Workout"} · ${workout.status || ""}${workout.current ? ` · ${workout.current.label}` : ""}`
-      : "Nessun workout attivo";
+      ? `${workout.name || "Allenamento"} · ${workoutStatus}${workout.current ? ` · ${workout.current.label}` : ""}`
+      : (state.session_active
+          ? `Sessione libera · ${state.session_paused ? "in pausa" : "in corso"}`
+          : "Nessuna sessione attiva");
 
     $("miniDuration").textContent = fmtDuration(stats.duration_s);
     $("miniDistance").textContent = (Number(stats.distance_km) || 0).toFixed(2);

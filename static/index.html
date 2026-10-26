@@ -211,6 +211,7 @@
     background: color-mix(in srgb, var(--power) 12%, transparent);
   }
   .btn:disabled { opacity: .45; cursor: wait; transform: none; }
+  .btn.disabled { opacity: .45; cursor: not-allowed; pointer-events: none; }
   .btn.primary {
     background: var(--power); border-color: var(--power); color: #1a0c05;
     font-weight: 700;
@@ -963,8 +964,9 @@
           <div class="timeline" id="workoutTimeline"></div>
           <div class="workout-controls">
             <button class="btn" id="btnPauseWorkout" type="button">Pausa</button>
-            <button class="btn ghost danger" id="btnStopWorkout" type="button">Termina</button>
+            <button class="btn ghost danger" id="btnStopWorkout" type="button">Concludi</button>
           </div>
+          <p class="workout-note">Pausa ferma cronometro e registrazione. Concludi salva subito la sessione e non avvia una nuova attività.</p>
         </div>
       </aside>
     </section>
@@ -1030,8 +1032,8 @@
 
       <aside class="card session-card">
         <div class="card-head">
-          <div><h2>Sessione</h2><p id="sessionId">-</p></div>
-          <button class="btn small ghost" id="btnReset">Nuova</button>
+          <div><h2>Sessione</h2><p id="sessionId">nessuna sessione attiva</p></div>
+          <button class="btn small ghost" id="btnReset" title="Avvia una sessione libera senza allenamento">Avvia sessione</button>
         </div>
         <dl class="stats">
           <div><dt>Tempo</dt><dd id="duration">00:00</dd></div>
@@ -1938,7 +1940,7 @@
 
     const next = workout.next;
     if (completed) {
-      $("targetNext").innerHTML = `Hai completato <b>${escapeHtml(workout.name)}</b>. La sessione resta aperta: puoi salvarla con <b>Nuova</b>.`;
+      $("targetNext").innerHTML = `Hai completato <b>${escapeHtml(workout.name)}</b>. Premi <b>Concludi</b> per salvare e chiudere la sessione.`;
     } else if (next) {
       $("targetNext").innerHTML = `Prossimo: <b>${escapeHtml(next.label)}</b>, ${fmtDuration(next.duration_s)}, <b>${Math.round(Number(next.power_w) || 0)} W</b>`;
     } else {
@@ -2062,8 +2064,9 @@
           ? "Completato"
           : "Pausa";
     pause.disabled = workout.status === "completed";
-    $("btnStopWorkout").textContent =
-      workout.status === "completed" ? "Chiudi" : "Termina";
+    $("btnStopWorkout").textContent = "Concludi";
+    $("btnStopWorkout").title =
+      "Salva e chiudi la sessione senza avviare una nuova attività";
 
     const timelineKey = `${workout.id}:${workout.intervals.length}:${workout.total_s}`;
     if (app.timelineWorkoutId !== timelineKey) {
@@ -2449,7 +2452,32 @@
     $("maxSpeed").innerHTML = `${(Number(s.max_speed_kmh) || 0).toFixed(1)} <small>km/h</small>`;
     $("calories").innerHTML = `${Math.round(Number(s.calories_kcal) || 0)} <small>kcal</small>`;
     $("avgWkg").innerHTML = `${(Number(s.avg_wkg) || 0).toFixed(1).replace(".", ",")} <small>W/kg</small>`;
-    setText("sessionId", state.session_id ? `sessione ${state.session_id}` : "-");
+    const sessionActive = Boolean(state.session_active);
+    const workoutActive = Boolean(state.workout && state.workout.active);
+    setText(
+      "sessionId",
+      sessionActive
+        ? `sessione ${state.session_id}${state.session_paused ? " · in pausa" : " · in corso"}`
+        : "nessuna sessione attiva"
+    );
+    const sessionButton = $("btnReset");
+    sessionButton.classList.toggle("hidden", workoutActive);
+    sessionButton.classList.toggle("danger", sessionActive);
+    sessionButton.textContent = sessionActive ? "Concludi" : "Avvia sessione";
+    sessionButton.title = sessionActive
+      ? "Salva e chiudi la sessione"
+      : "Avvia una sessione libera senza allenamento";
+    ["btnTcx", "btnCsv"].forEach((id) => {
+      const link = $(id);
+      link.classList.toggle("disabled", !sessionActive);
+      link.setAttribute("aria-disabled", sessionActive ? "false" : "true");
+      link.tabIndex = sessionActive ? 0 : -1;
+    });
+    if (sessionActive) {
+      const stamp = Math.floor(Date.now() / 1000);
+      $("btnTcx").href = `/api/export.tcx?t=${stamp}`;
+      $("btnCsv").href = `/api/export.csv?t=${stamp}`;
+    }
 
     drawChart();
     drawSpark("speedSpark", app.history.map((p) => p.s), COLORS.speed);
@@ -2512,7 +2540,6 @@
       app._lastError = null;
     }
 
-    $("btnCsv").href = `/api/export.csv?t=${Math.floor(Date.now() / 1000)}`;
   }
 
   // ---------------------------------------------------------------- ws
@@ -2585,12 +2612,24 @@
     }
   }
 
-  async function resetSession() {
-    if (!confirm("Chiudere la sessione corrente e salvare i dati?")) return;
+  async function toggleSession() {
+    const active = Boolean(app.snapshot && app.snapshot.session_active);
+    if (active) {
+      if (!confirm("Concludere la sessione e salvare i dati? Non verrà avviata una nuova attività.")) return;
+      try {
+        const state = await api("/api/session/stop", { method: "POST" });
+        render(state);
+        toast(state.stopped_session ? "Sessione salvata e chiusa" : "Sessione chiusa");
+        loadSessions();
+      } catch (err) {
+        toast(err.message, true);
+      }
+      return;
+    }
     try {
-      const out = await api("/api/session/reset", { method: "POST" });
-      toast(out.last_session ? "Sessione salvata" : "Nuova sessione");
-      loadSessions();
+      const state = await api("/api/session/start", { method: "POST" });
+      render(state);
+      toast("Sessione libera avviata");
     } catch (err) {
       toast(err.message, true);
     }
@@ -2669,7 +2708,7 @@
       app.timelineWorkoutId = null;
       app.lastWorkoutIndex = null;
       render(state);
-      toast("Allenamento avviato · nuova sessione");
+      toast("Allenamento avviato · registrazione attiva");
       if (state.last_session) loadSessions();
     } catch (err) {
       toast(err.message, true);
@@ -2683,7 +2722,11 @@
     try {
       const state = await api(path, { method: "POST" });
       render(state);
-      toast(workout.status === "paused" ? "Allenamento ripreso" : "Allenamento in pausa");
+      toast(
+        workout.status === "paused"
+          ? "Allenamento ripreso"
+          : "Allenamento in pausa · registrazione ferma"
+      );
     } catch (err) {
       toast(err.message, true);
     }
@@ -2692,17 +2735,18 @@
   async function stopActiveWorkout() {
     const workout = app.snapshot && app.snapshot.workout;
     if (!workout || !workout.active) return;
-    const message =
-      workout.status === "completed"
-        ? "Chiudere l'allenamento completato?"
-        : "Terminare l'allenamento? La sessione resta aperta.";
-    if (!confirm(message)) return;
+    if (!confirm("Concludere l'allenamento e salvare la sessione? Non verrà avviata una nuova attività.")) return;
     try {
       const state = await api("/api/workout/stop", { method: "POST" });
       app.timelineWorkoutId = null;
       app.lastWorkoutIndex = null;
       render(state);
-      toast("Allenamento terminato");
+      toast(
+        state.stopped_session
+          ? "Allenamento concluso · sessione salvata"
+          : "Allenamento concluso"
+      );
+      loadSessions();
     } catch (err) {
       toast(err.message, true);
     }
@@ -2860,7 +2904,7 @@
   $("btnScan").addEventListener("click", scan);
   $("btnMini").addEventListener("click", openMiniPlayer);
   $("btnDisconnect").addEventListener("click", disconnectDevice);
-  $("btnReset").addEventListener("click", resetSession);
+  $("btnReset").addEventListener("click", toggleSession);
   $("btnRefresh").addEventListener("click", loadSessions);
   $("btnSaveSettings").addEventListener("click", saveSettings);
 
