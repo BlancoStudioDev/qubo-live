@@ -80,6 +80,37 @@ class TcxTests(unittest.TestCase):
         self.assertEqual(tcx.count("<Trackpoint>"), 2)
         self.assertEqual(tcx.count("<TotalTimeSeconds>1.0</TotalTimeSeconds>"), 2)
 
+    def test_laps_keep_every_sample_in_the_stream(self):
+        samples = [
+            {
+                "timestamp": f"2026-10-23T17:56:{second}",
+                "elapsed_s": elapsed,
+                "power_w": power,
+                "speed_kmh": 20.0,
+                "cadence_rpm": 80.0,
+                "distance_km": elapsed * 0.005,
+            }
+            for second, elapsed, power in (
+                (39, 0.5, 0.0),
+                (40, 1.5, 100.0),
+                (41, 2.5, 200.0),
+                (42, 3.5, 300.0),
+            )
+        ]
+        tcx = build_tcx(
+            samples,
+            started_at="2026-10-23T17:56:38",
+            laps=[
+                {"label": "Andata", "duration_s": 2.0},
+                {"label": "Ritorno", "duration_s": 2.0},
+            ],
+        )
+        self.assertEqual(tcx.count("<Trackpoint>"), 5)
+        for watts in (100, 200, 300):
+            self.assertIn(f"<Watts>{watts}</Watts>", tcx)
+        self.assertIn("<Time>2026-10-23T17:56:38Z</Time>", tcx)
+        self.assertIn("<Time>2026-10-23T17:56:42Z</Time>", tcx)
+
     def test_finalize_writes_tcx(self):
         with tempfile.TemporaryDirectory() as directory:
             path = Path(directory)

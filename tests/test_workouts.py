@@ -39,6 +39,12 @@ class WorkoutNotesTests(unittest.TestCase):
         self.assertTrue(library)
         self.assertTrue(all(item["notes"].strip() for item in library))
 
+    def test_tcx_notes_say_laps_are_only_summaries(self):
+        notes = {item["id"]: item["notes"] for item in default_workouts()}
+        for identifier in ("vo2max-5x3", "vo2max-4x3", "soglia-3x8"):
+            self.assertIn("flusso completo", notes[identifier])
+        self.assertNotIn("su Strava vedi la media", notes["vo2max-4x3"])
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -125,11 +125,13 @@ JSON) quando premi **Nuova** o **Disconnetti**. Avviare un allenamento finalizza
 la sessione precedente e ne apre una nuova, così le statistiche partono da zero.
 Il CSV e il TCX della sessione in corso sono scaricabili in qualsiasi momento.
 
-Il **TCX** contiene un punto al secondo con tempo, distanza, velocità, potenza e
+Il **TCX** contiene sempre tutti i campioni registrati, dall'inizio alla fine
+della seduta, con un punto al secondo e tempo, distanza, velocità, potenza e
 cadenza: è il formato da caricare su Strava per vedere i grafici e le statistiche
 complete. Se la sessione è stata avviata da un workout, il TCX contiene anche un
-**lap per ogni intervallo**: su Strava puoi leggere la media dei 20 minuti del
-test FTP e di ogni ripetuta VO2max/soglia. Per le sessioni già salvate il TCX
+**lap per ogni intervallo**: i lap sono solo riepiloghi per leggere la media dei
+20 minuti del test FTP e di ogni ripetuta VO2max/soglia, non sostituiscono il
+flusso completo dei campioni. Per le sessioni già salvate il TCX
 viene generato al volo dal CSV, quindi il link funziona anche per le attività
 vecchie. Gli orari sono scritti come ora locale della sessione perché Strava,
 per i file senza GPS, interpreta i timestamp come ora locale.

@@ -117,9 +117,9 @@ sembrano troppo facili, altrimenti alla fine del blocco.
 - Resistenza fissa, stesso livello e stesso rapporto del primo test; no ERG,
   no Strada. Cadenza 85-95 rpm, stay seated.
 - 10 min defaticamento a 96 W.
-- Non mettere in pausa: il TCX crea un lap per intervallo e il test è il
-  **penultimo lap** (dopo c'è solo il defaticamento). FTP = media 20 minuti
-  × 0,95.
+- Non mettere in pausa. Il TCX contiene tutti i campioni della seduta; il lap
+  del test è solo un riepilogo per leggere la media dei 20 minuti (dopo c'è
+  solo il defaticamento). FTP = media 20 minuti × 0,95.
 
 Il target di 185 W nella card è solo un'indicazione (103% di 179 W): non
 inseguirlo, vai a sensazione.

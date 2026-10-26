@@ -1044,7 +1044,7 @@
           <div><dt>W/kg</dt><dd id="avgWkg">0,0 <small>W/kg</small></dd></div>
         </dl>
         <div class="session-actions">
-          <a class="btn small" id="btnTcx" href="/api/export.tcx">Scarica TCX</a>
+          <a class="btn small" id="btnTcx" href="/api/export.tcx" title="TCX completo: tutti i campioni della seduta; i lap sono solo riepiloghi">Scarica TCX</a>
           <a class="btn small ghost" id="btnCsv" href="/api/export.csv">CSV</a>
         </div>
       </aside>
@@ -2761,7 +2761,7 @@
           <span class="when">${escapeHtml(when)}</span>
           <span class="fig">${fmtDuration(s.duration_s)} · ${Number(s.distance_km || 0).toFixed(1)} km · ${Math.round(Number(s.avg_power_w) || 0)} W${extra ? ` · ${extra}` : ""}</span>
           <span class="session-links">
-            <a href="/api/sessions/${encodeURIComponent(s.id)}/tcx">TCX</a>
+            <a href="/api/sessions/${encodeURIComponent(s.id)}/tcx" title="TCX completo: tutti i campioni della seduta; i lap sono solo riepiloghi">TCX</a>
             <a href="/api/sessions/${encodeURIComponent(s.csv)}">CSV</a>
           </span>`;
         list.appendChild(row);

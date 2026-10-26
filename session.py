@@ -80,9 +80,9 @@ def build_tcx(
 ) -> str:
     """Build a TCX with power, cadence, speed and distance for Strava.
 
-    ``laps`` can be the workout interval list.  When present, each interval
-    becomes a TCX lap, so Strava shows the average power of the FTP test or of
-    every VO2max/threshold repetition.
+    The complete sample stream is always written, from the first to the last
+    recorded sample.  ``laps`` only groups those points into workout intervals
+    so Strava can show per-interval summaries; it never replaces the stream.
     """
     if not samples:
         raise ValueError("nessun campione disponibile per il TCX")
