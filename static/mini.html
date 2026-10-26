@@ -1,0 +1,504 @@
+<!doctype html>
+<html lang="it">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Qubo Live mini</title>
+<style>
+  :root {
+    --bg: #0e0f0f;
+    --surface: #171918;
+    --text: #f2f3ef;
+    --muted: #8a918d;
+    --muted-2: #5f6763;
+    --line: #2a2d2b;
+    --power: #ff6b35;
+    --speed: #5ad1e6;
+    --cadence: #c8f04b;
+    --mono: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+    --ui: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; height: 100%; overflow: hidden; }
+  body {
+    background: var(--bg); color: var(--text); font-family: var(--ui);
+    display: flex; flex-direction: column; user-select: none;
+  }
+  .top {
+    display: flex; align-items: center; justify-content: space-between;
+    gap: 8px; padding: 9px 12px 5px;
+  }
+  .brand {
+    display: flex; align-items: center; gap: 7px;
+    color: var(--muted); font: 700 10px/1 var(--mono);
+    letter-spacing: .15em;
+  }
+  .dot {
+    width: 6px; height: 6px; border-radius: 50%; background: var(--muted-2);
+    flex: none;
+  }
+  .dot.live {
+    background: var(--cadence);
+    box-shadow: 0 0 9px color-mix(in srgb, var(--cadence) 65%, transparent);
+  }
+  .status-text {
+    color: var(--muted-2); font: 500 9px/1 var(--mono);
+    letter-spacing: .08em; text-transform: uppercase;
+  }
+  .page-title {
+    color: var(--muted-2); font: 600 9px/1 var(--mono);
+    letter-spacing: .14em; text-transform: uppercase;
+  }
+  .close {
+    appearance: none; border: 1px solid var(--line); background: transparent;
+    color: var(--muted); width: 24px; height: 24px; border-radius: 6px;
+    font: 400 17px/1 var(--ui); cursor: pointer; padding: 0;
+  }
+  .close:hover { color: var(--text); border-color: var(--muted-2); }
+  .viewport { flex: 1; overflow: hidden; touch-action: pan-y; }
+  .track {
+    display: flex; height: 100%;
+    transition: transform .28s cubic-bezier(.2, .8, .2, 1);
+  }
+  .page {
+    min-width: 100%; height: 100%;
+    padding: 8px 18px 4px;
+    display: flex; flex-direction: column; justify-content: center;
+    gap: 8px;
+  }
+  .label {
+    color: var(--muted-2); font: 600 9px/1 var(--mono);
+    letter-spacing: .16em; text-transform: uppercase;
+  }
+  .big {
+    font: 700 clamp(54px, min(22vw, 34vh), 150px)/.86 var(--mono);
+    font-variant-numeric: tabular-nums; letter-spacing: -.055em;
+    color: var(--power);
+    display: flex; align-items: baseline; white-space: nowrap;
+  }
+  .big.speed { color: var(--speed); }
+  .big.cadence { color: var(--cadence); }
+  .unit {
+    color: var(--muted); font: 600 13px/1 var(--mono);
+    letter-spacing: 0; margin-left: 7px;
+  }
+  .meta {
+    display: flex; align-items: center; justify-content: space-between;
+    gap: 8px; color: var(--muted); font: 600 10px/1 var(--mono);
+    letter-spacing: .04em; text-transform: uppercase;
+  }
+  .zone { color: var(--muted-2); }
+  .elapsed {
+    color: var(--muted-2); font: 600 9px/1 var(--mono);
+    letter-spacing: .04em; text-transform: uppercase; white-space: nowrap;
+  }
+  .target {
+    color: var(--muted); font: 500 10px/1.35 var(--mono);
+    border-top: 1px solid var(--line); padding-top: 7px;
+    overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  }
+  .target b { color: var(--text); font-weight: 600; }
+  .strip {
+    display: flex; justify-content: space-between; flex-wrap: wrap; gap: 4px 10px;
+    color: var(--muted-2); font: 500 10px/1 var(--mono);
+    border-top: 1px solid var(--line); padding-top: 7px;
+  }
+  .strip b { color: var(--text); font-weight: 600; }
+  .chart-wrap { flex: 1; min-height: 0; display: flex; }
+  canvas { width: 100%; height: 100%; display: block; }
+  .legend {
+    display: flex; gap: 14px; color: var(--muted);
+    font: 500 9px/1 var(--mono); letter-spacing: .08em; text-transform: uppercase;
+  }
+  .legend .sw { display: inline-block; width: 10px; height: 2px; margin-right: 5px; vertical-align: middle; }
+  .legend .sw.power { background: var(--power); }
+  .legend .sw.speed { background: var(--speed); }
+  .duo {
+    display: grid; grid-template-columns: 1fr 1fr; gap: 12px;
+    border-top: 1px solid var(--line); border-bottom: 1px solid var(--line);
+    padding: 10px 0;
+  }
+  .duo-item { min-width: 0; }
+  .duo-label {
+    color: var(--muted-2); font: 600 9px/1 var(--mono);
+    letter-spacing: .14em; text-transform: uppercase; margin-bottom: 5px;
+  }
+  .duo-value {
+    display: flex; align-items: baseline; white-space: nowrap;
+    font: 700 clamp(38px, min(14vw, 20vh), 84px)/1 var(--mono);
+    font-variant-numeric: tabular-nums; letter-spacing: -.04em;
+  }
+  .duo-value .unit { font-size: 10px; margin-left: 4px; }
+  .stats-grid {
+    display: grid; grid-template-columns: 1fr 1fr; gap: 7px 14px;
+    padding: 3px 0 6px;
+  }
+  .stats-grid > div {
+    display: flex; align-items: baseline; gap: 4px;
+    border-bottom: 1px solid var(--line); padding-bottom: 5px;
+    min-width: 0;
+  }
+  .stats-grid span {
+    color: var(--muted-2); font: 500 9px/1 var(--mono);
+    letter-spacing: .06em; text-transform: uppercase; flex: 1;
+  }
+  .stats-grid b {
+    color: var(--text); font: 600 14px/1 var(--mono);
+    font-variant-numeric: tabular-nums; white-space: nowrap;
+  }
+  .stats-grid small { color: var(--muted-2); font: 500 8px/1 var(--mono); }
+  .nav {
+    display: flex; align-items: center; justify-content: space-between;
+    gap: 10px; padding: 3px 10px 8px;
+  }
+  .nav button {
+    appearance: none; border: 0; background: transparent; color: var(--muted-2);
+    font: 400 24px/1 var(--ui); cursor: pointer; padding: 0 5px;
+    border-radius: 5px;
+  }
+  .nav button:hover { color: var(--text); background: var(--surface); }
+  .dots { display: flex; gap: 5px; align-items: center; }
+  .dot-page {
+    appearance: none; border: 0; padding: 0; cursor: pointer;
+    width: 6px; height: 6px; border-radius: 50%;
+    background: #4a514d; opacity: .65;
+    transition: background .2s, opacity .2s, transform .2s;
+  }
+  .dot-page.active { background: var(--power); opacity: 1; transform: scale(1.3); }
+  .empty {
+    color: var(--muted-2); font: 500 10px/1.4 var(--mono);
+    text-align: center; padding: 18px 0;
+  }
+</style>
+</head>
+<body>
+  <div class="top">
+    <div class="brand"><span class="dot" id="miniDot"></span> QUBO LIVE <span class="status-text" id="miniStatus">offline</span></div>
+    <div class="page-title" id="miniPageTitle">Potenza</div>
+    <button class="close" id="miniClose" title="Chiudi" aria-label="Chiudi">×</button>
+  </div>
+
+  <div class="viewport" id="miniViewport">
+    <div class="track" id="miniTrack">
+      <section class="page">
+        <div class="label">Potenza</div>
+        <div class="big"><span id="miniPower">0</span><span class="unit">W</span></div>
+        <div class="meta"><span class="zone" id="miniZone">-</span><span class="elapsed" id="miniPowerElapsed">TEMPO 00:00</span><span id="miniPct">0% FTP</span></div>
+        <div class="target" id="miniTarget">Nessun target attivo</div>
+        <div class="strip"><span>VEL <b id="miniSpeed">0</b> km/h</span><span>CAD <b id="miniCadence">0</b> rpm</span><span>W/KG <b id="miniWkg">0,0</b></span></div>
+      </section>
+
+      <section class="page">
+        <div class="label">Andamento</div>
+        <div class="chart-wrap"><canvas id="miniChart"></canvas></div>
+        <div class="legend"><span><i class="sw power"></i>potenza</span><span><i class="sw speed"></i>velocità</span></div>
+      </section>
+
+      <section class="page">
+        <div class="label">Cadenza e velocità</div>
+        <div class="duo">
+          <div class="duo-item">
+            <div class="duo-label">Cadenza</div>
+            <div class="duo-value cadence"><span id="miniCadenceBig">0</span><span class="unit">rpm</span></div>
+          </div>
+          <div class="duo-item">
+            <div class="duo-label">Velocità</div>
+            <div class="duo-value speed"><span id="miniSpeedBig">0</span><span class="unit">km/h</span></div>
+          </div>
+        </div>
+        <div class="target" id="miniTarget2">Nessun target attivo</div>
+        <div class="strip">
+          <span>TEMPO <b id="miniSpeedElapsed">00:00</b></span>
+          <span>FTP <b id="miniSpeedFtp">179</b> W</span>
+        </div>
+      </section>
+
+      <section class="page">
+        <div class="label">Sessione</div>
+        <div class="stats-grid">
+          <div><span>Tempo</span><b id="miniDuration">00:00</b></div>
+          <div><span>Distanza</span><b id="miniDistance">0.00</b><small>km</small></div>
+          <div><span>Media</span><b id="miniAvgPower">0</b><small>W</small></div>
+          <div><span>Max</span><b id="miniMaxPower">0</b><small>W</small></div>
+          <div><span>Media vel.</span><b id="miniAvgSpeed">0</b><small>km/h</small></div>
+          <div><span>Max vel.</span><b id="miniMaxSpeed">0</b><small>km/h</small></div>
+          <div><span>Calorie</span><b id="miniCalories">0</b><small>kcal</small></div>
+          <div><span>W/kg</span><b id="miniWkgAvg">0,0</b><small>W/kg</small></div>
+        </div>
+        <div class="target" id="miniWorkout">Nessun workout attivo</div>
+      </section>
+    </div>
+  </div>
+
+  <div class="nav">
+    <button id="miniPrev" aria-label="Pagina precedente">‹</button>
+    <div class="dots" id="miniDots"></div>
+    <button id="miniNext" aria-label="Pagina successiva">›</button>
+  </div>
+
+<script>
+(() => {
+  "use strict";
+  const HOST = location.host || "__QUBO_HOST__";
+  const WS_URL = (location.protocol === "https:" ? "wss://" : "ws://") + HOST + "/ws";
+  const $ = (id) => document.getElementById(id);
+  const pages = Array.from(document.querySelectorAll(".page"));
+  const titles = ["Potenza", "Grafico", "Cadenza e velocità", "Sessione"];
+  const dots = $("miniDots");
+  let pageIndex = 0;
+  let state = null;
+  let ws = null;
+
+  const zones = [
+    { max: 0.55, name: "Z1 · recupero", color: "#7c8b8d" },
+    { max: 0.75, name: "Z2 · endurance", color: "#c8f04b" },
+    { max: 0.90, name: "Z3 · tempo", color: "#ffd166" },
+    { max: 1.05, name: "Z4 · soglia", color: "#ff8a3d" },
+    { max: 1.20, name: "Z5 · VO2", color: "#ff5a1f" },
+    { max: Infinity, name: "Z6 · anaerobico", color: "#ff4d4d" },
+  ];
+
+  function fmtDuration(seconds) {
+    const total = Math.max(0, Math.round(Number(seconds) || 0));
+    const h = Math.floor(total / 3600);
+    const m = Math.floor((total % 3600) / 60);
+    const s = total % 60;
+    return h > 0
+      ? `${h}:${String(m).padStart(2, "0")}:${String(s).padStart(2, "0")}`
+      : `${String(m).padStart(2, "0")}:${String(s).padStart(2, "0")}`;
+  }
+
+  function go(index) {
+    pageIndex = Math.max(0, Math.min(pages.length - 1, index));
+    $("miniTrack").style.transform = `translateX(-${pageIndex * 100}%)`;
+    $("miniPageTitle").textContent = titles[pageIndex];
+    dots.querySelectorAll("button").forEach((dot, i) => {
+      dot.classList.toggle("active", i === pageIndex);
+    });
+    if (pageIndex === 1) drawChart();
+  }
+
+  pages.forEach((_, index) => {
+    const dot = document.createElement("button");
+    dot.className = "dot-page";
+    dot.type = "button";
+    dot.setAttribute("aria-label", `Pagina ${index + 1}: ${titles[index]}`);
+    dot.addEventListener("click", () => go(index));
+    dots.appendChild(dot);
+  });
+
+  $("miniPrev").addEventListener("click", () => go(pageIndex - 1));
+  $("miniNext").addEventListener("click", () => go(pageIndex + 1));
+  $("miniClose").addEventListener("click", () => window.close());
+  document.addEventListener("keydown", (event) => {
+    if (event.key === "ArrowLeft") go(pageIndex - 1);
+    if (event.key === "ArrowRight") go(pageIndex + 1);
+  });
+
+  const viewport = $("miniViewport");
+  let startX = null;
+  let startY = null;
+  viewport.addEventListener("pointerdown", (event) => {
+    if (event.pointerType === "mouse" && event.button !== 0) return;
+    startX = event.clientX;
+    startY = event.clientY;
+  });
+  viewport.addEventListener("pointerup", (event) => {
+    if (startX == null) return;
+    const dx = event.clientX - startX;
+    const dy = event.clientY - startY;
+    if (Math.abs(dx) > 30 && Math.abs(dx) > Math.abs(dy)) {
+      go(pageIndex + (dx < 0 ? 1 : -1));
+    }
+    startX = null;
+    startY = null;
+  });
+  viewport.addEventListener("pointercancel", () => { startX = null; startY = null; });
+  viewport.addEventListener("wheel", (event) => {
+    if (Math.abs(event.deltaX) > Math.abs(event.deltaY) && Math.abs(event.deltaX) > 8) {
+      event.preventDefault();
+      go(pageIndex + (event.deltaX > 0 ? 1 : -1));
+    }
+  }, { passive: false });
+
+  function setStatus(status) {
+    const connected = status === "connected" || status === "simulating";
+    $("miniDot").classList.toggle("live", connected);
+    $("miniStatus").textContent = connected
+      ? (status === "simulating" ? "demo" : "live")
+      : "offline";
+  }
+
+  function render(nextState) {
+    state = nextState || {};
+    const metrics = state.metrics || {};
+    const stats = state.stats || {};
+    const workout = state.workout || {};
+    const ftp = Number(state.config && state.config.ftp_w) || 179;
+    const weight = Number(state.config && state.config.weight_kg) || 82;
+    const power = Number(metrics.power_w) || 0;
+    const speed = Number(metrics.speed_kmh) || 0;
+    const cadence = Number(metrics.cadence_rpm) || 0;
+    const pct = ftp > 0 ? power / ftp : 0;
+    const wkg = weight > 0 ? power / weight : 0;
+    const zone = zones.find((item) => pct <= item.max) || zones[zones.length - 1];
+
+    $("miniPower").textContent = String(Math.round(power));
+    $("miniSpeed").textContent = speed.toFixed(1).replace(".", ",");
+    $("miniCadence").textContent = String(Math.round(cadence));
+    $("miniWkg").textContent = wkg.toFixed(1).replace(".", ",");
+    $("miniSpeedBig").textContent = speed.toFixed(1).replace(".", ",");
+    $("miniCadenceBig").textContent = String(Math.round(cadence));
+    $("miniPowerElapsed").textContent = `TEMPO ${fmtDuration(stats.duration_s)}`;
+    $("miniSpeedElapsed").textContent = fmtDuration(stats.duration_s);
+    $("miniSpeedFtp").textContent = String(Math.round(ftp));
+    $("miniPct").textContent = `${Math.round(pct * 100)}% FTP`;
+    const zoneEl = $("miniZone");
+    zoneEl.textContent = power > 5 ? zone.name : "-";
+    zoneEl.style.color = power > 5 ? zone.color : "";
+
+    let targetText = "Nessun target attivo";
+    if (workout.active) {
+      const current = workout.current || {};
+      const target = workout.target_power != null
+        ? `Target ${Math.round(workout.target_power)} W`
+        : "Workout completato";
+      const label = current.label ? ` · ${current.label}` : "";
+      const remaining = workout.status === "completed"
+        ? ""
+        : ` · ${fmtDuration(workout.remaining_s)} rimanenti`;
+      targetText = `${target}${label}${remaining}`;
+    }
+    $("miniTarget").textContent = targetText;
+    $("miniTarget2").textContent = targetText;
+    $("miniWorkout").textContent = workout.active
+      ? `${workout.name || "Workout"} · ${workout.status || ""}${workout.current ? ` · ${workout.current.label}` : ""}`
+      : "Nessun workout attivo";
+
+    $("miniDuration").textContent = fmtDuration(stats.duration_s);
+    $("miniDistance").textContent = (Number(stats.distance_km) || 0).toFixed(2);
+    $("miniAvgPower").textContent = String(Math.round(Number(stats.avg_power_w) || 0));
+    $("miniMaxPower").textContent = String(Math.round(Number(stats.max_power_w) || 0));
+    $("miniAvgSpeed").textContent = (Number(stats.avg_speed_kmh) || 0).toFixed(1).replace(".", ",");
+    $("miniMaxSpeed").textContent = (Number(stats.max_speed_kmh) || 0).toFixed(1).replace(".", ",");
+    $("miniCalories").textContent = String(Math.round(Number(stats.calories_kcal) || 0));
+    $("miniWkgAvg").textContent = (Number(stats.avg_wkg) || 0).toFixed(1).replace(".", ",");
+
+    drawChart();
+  }
+
+  function drawChart() {
+    const canvas = $("miniChart");
+    if (!canvas) return;
+    const rect = canvas.getBoundingClientRect();
+    if (rect.width < 2 || rect.height < 2) return;
+    const dpr = window.devicePixelRatio || 1;
+    canvas.width = Math.max(1, Math.round(rect.width * dpr));
+    canvas.height = Math.max(1, Math.round(rect.height * dpr));
+    const ctx = canvas.getContext("2d");
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    ctx.clearRect(0, 0, rect.width, rect.height);
+
+    const history = (state && state.history) || [];
+    if (history.length < 2) {
+      ctx.fillStyle = "#5f6763";
+      ctx.font = "500 10px ui-monospace, monospace";
+      ctx.textAlign = "center";
+      ctx.fillText("in attesa di dati", rect.width / 2, rect.height / 2);
+      return;
+    }
+
+    const data = history.slice(-120);
+    const width = rect.width;
+    const height = rect.height;
+    const maxPower = Math.max(250, ...data.map((point) => Number(point.p) || 0)) * 1.1;
+    const maxSpeed = Math.max(45, ...data.map((point) => Number(point.s) || 0)) * 1.1;
+    const xAt = (index) => (index / Math.max(1, data.length - 1)) * width;
+    const yPower = (value) => height - (Number(value) / maxPower) * height;
+    const ySpeed = (value) => height - (Number(value) / maxSpeed) * height;
+
+    ctx.strokeStyle = "rgba(255,255,255,.075)";
+    ctx.lineWidth = 1;
+    for (let i = 1; i < 4; i += 1) {
+      const y = (height * i) / 4;
+      ctx.beginPath();
+      ctx.moveTo(0, y);
+      ctx.lineTo(width, y);
+      ctx.stroke();
+    }
+
+    ctx.beginPath();
+    ctx.moveTo(0, height);
+    data.forEach((point, index) => ctx.lineTo(xAt(index), yPower(point.p)));
+    ctx.lineTo(width, height);
+    ctx.closePath();
+    const gradient = ctx.createLinearGradient(0, 0, 0, height);
+    gradient.addColorStop(0, "rgba(255,107,53,.30)");
+    gradient.addColorStop(1, "rgba(255,107,53,0)");
+    ctx.fillStyle = gradient;
+    ctx.fill();
+
+    ctx.beginPath();
+    data.forEach((point, index) => {
+      const x = xAt(index);
+      const y = yPower(point.p);
+      if (index === 0) ctx.moveTo(x, y);
+      else ctx.lineTo(x, y);
+    });
+    ctx.strokeStyle = "#ff6b35";
+    ctx.lineWidth = 2;
+    ctx.lineJoin = "round";
+    ctx.stroke();
+
+    ctx.beginPath();
+    data.forEach((point, index) => {
+      const x = xAt(index);
+      const y = ySpeed(point.s);
+      if (index === 0) ctx.moveTo(x, y);
+      else ctx.lineTo(x, y);
+    });
+    ctx.strokeStyle = "#5ad1e6";
+    ctx.lineWidth = 1.5;
+    ctx.stroke();
+
+    const last = data[data.length - 1];
+    ctx.textAlign = "left";
+    ctx.font = "600 9px ui-monospace, monospace";
+    ctx.fillStyle = "#ff6b35";
+    ctx.fillText(`${Math.round(Number(last.p) || 0)} W`, 3, 11);
+    ctx.fillStyle = "#5ad1e6";
+    ctx.fillText(`${(Number(last.s) || 0).toFixed(1)} km/h`, 3, 23);
+  }
+
+  function connect() {
+    setStatus("connecting");
+    ws = new WebSocket(WS_URL);
+    ws.addEventListener("open", () => setStatus("connected"));
+    ws.addEventListener("message", (event) => {
+      try {
+        const nextState = JSON.parse(event.data);
+        setStatus(nextState.status || "connected");
+        render(nextState);
+      } catch (error) {
+        // Ignore malformed frames and keep the last good state.
+      }
+    });
+    ws.addEventListener("close", () => {
+      setStatus("offline");
+      window.setTimeout(connect, 1500);
+    });
+    ws.addEventListener("error", () => ws.close());
+  }
+
+  window.addEventListener("resize", drawChart);
+  if ("ResizeObserver" in window) {
+    const observer = new ResizeObserver(() => drawChart());
+    observer.observe($("miniChart"));
+  }
+
+  go(0);
+  connect();
+})();
+</script>
+</body>
+</html>

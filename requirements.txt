@@ -1,0 +1,6 @@
+bleak>=0.22
+fastapi>=0.110
+uvicorn>=0.29
+websockets>=12
+# ANT+ opzionale: richiede una chiavetta USB ANT+ e libusb
+# openant>=1.3

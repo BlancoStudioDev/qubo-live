@@ -1,0 +1,2986 @@
+<!doctype html>
+<html lang="it" data-theme="dark">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Qubo Live · dashboard rullo</title>
+<meta name="description" content="Dashboard locale per il rullo Elite Qubo: potenza, velocità, cadenza, allenamenti strutturati e controllo FTMS.">
+<meta name="theme-color" content="#0a0e10" id="metaTheme">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='14' fill='%23ff5a1f'/%3E%3Ctext x='32' y='45' font-family='monospace' font-size='36' font-weight='700' text-anchor='middle' fill='%231a0c05'%3EQ%3C/text%3E%3C/svg%3E">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Outfit:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<script>
+  (function () {
+    var stored = null;
+    try { stored = localStorage.getItem("qubo-theme"); } catch (err) { /* storage opzionale */ }
+    var theme = stored === "light" || stored === "dark"
+      ? stored
+      : (window.matchMedia && window.matchMedia("(prefers-color-scheme: light)").matches ? "light" : "dark");
+    document.documentElement.dataset.theme = theme;
+  })();
+</script>
+<style>
+  :root {
+    --font-ui: "Outfit", ui-sans-serif, -apple-system, "Segoe UI", Roboto, sans-serif;
+    --font-data: "JetBrains Mono", ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+    --mono: var(--font-data);
+    --radius: 18px;
+  }
+
+  :root[data-theme="dark"] {
+    color-scheme: dark;
+    --bg: #0a0e10;
+    --surface: #11171a;
+    --surface-2: #0d1215;
+    --surface-3: #182125;
+    --field: #0a0f11;
+    --track: #1d272b;
+    --line: #242f33;
+    --line-soft: #1a2327;
+    --text: #eef4f2;
+    --muted: #8fa1a3;
+    --muted-2: #5f7275;
+    --hover: rgba(238, 244, 242, .04);
+    --scrim: rgba(4, 8, 10, .62);
+    --sheen: rgba(255, 255, 255, .05);
+    --power: #ff5a1f;
+    --speed: #38d6d6;
+    --cadence: #c9f24d;
+    --warn: #ffd166;
+    --danger: #ff5d5d;
+    --focus: #c9f24d;
+    --shadow-card: 0 22px 48px -36px rgba(0, 0, 0, .9);
+    --shadow-pop: 0 34px 90px -28px rgba(0, 0, 0, .92);
+    --glow-a: rgba(255, 90, 31, .08);
+    --glow-b: rgba(56, 214, 214, .05);
+    --glow-c: rgba(201, 242, 77, .045);
+    --grain-opacity: .05;
+    --c-grid: #223034;
+    --c-axis: #8fa1a3;
+    --c-marker: #eef4f2;
+  }
+
+  :root[data-theme="light"] {
+    color-scheme: light;
+    --bg: #edf0ee;
+    --surface: #ffffff;
+    --surface-2: #f6f8f7;
+    --surface-3: #e9eeec;
+    --field: #f2f5f4;
+    --track: #dbe2df;
+    --line: #d8e0dc;
+    --line-soft: #e3e9e6;
+    --text: #14201d;
+    --muted: #54655f;
+    --muted-2: #7e8f89;
+    --hover: rgba(20, 32, 29, .05);
+    --scrim: rgba(18, 28, 25, .38);
+    --sheen: rgba(255, 255, 255, .9);
+    --power: #e0430b;
+    --speed: #0e9aa0;
+    --cadence: #7fae00;
+    --warn: #b7791f;
+    --danger: #d92d20;
+    --focus: #e0430b;
+    --shadow-card: 0 1px 2px rgba(20, 32, 29, .05), 0 18px 44px -32px rgba(20, 32, 29, .28);
+    --shadow-pop: 0 30px 80px -30px rgba(20, 32, 29, .38);
+    --glow-a: rgba(224, 67, 11, .07);
+    --glow-b: rgba(14, 154, 160, .06);
+    --glow-c: rgba(127, 174, 0, .06);
+    --grain-opacity: .035;
+    --c-grid: #dfe6e2;
+    --c-axis: #54655f;
+    --c-marker: #14201d;
+  }
+
+  * { box-sizing: border-box; }
+
+  html, body { margin: 0; min-height: 100%; }
+
+  body {
+    background:
+      radial-gradient(1100px 540px at 82% -12%, var(--glow-a), transparent 62%),
+      radial-gradient(920px 480px at 0% -6%, var(--glow-b), transparent 56%),
+      radial-gradient(820px 440px at 52% -20%, var(--glow-c), transparent 64%),
+      var(--bg);
+    color: var(--text);
+    font-family: var(--font-ui);
+    font-size: 14px;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  /* leggera grana per rompere la planarita' delle superfici */
+  body::after {
+    content: ""; position: fixed; inset: 0; z-index: 2; pointer-events: none;
+    opacity: var(--grain-opacity);
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='120' height='120'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2'/%3E%3C/filter%3E%3Crect width='120' height='120' filter='url(%23n)' opacity='0.55'/%3E%3C/svg%3E");
+  }
+
+  ::selection { background: color-mix(in srgb, var(--power) 28%, transparent); }
+
+  :focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }
+
+  * { scrollbar-width: thin; scrollbar-color: var(--line) transparent; }
+  ::-webkit-scrollbar { width: 10px; height: 10px; }
+  ::-webkit-scrollbar-thumb {
+    background: var(--line); border-radius: 99px;
+    border: 3px solid transparent; background-clip: content-box;
+  }
+  ::-webkit-scrollbar-track { background: transparent; }
+
+  @media (prefers-reduced-motion: reduce) {
+    * { transition-duration: .01ms !important; animation-duration: .01ms !important; }
+  }
+
+  .app { max-width: 1720px; margin: 0 auto; padding: 26px 34px 72px; position: relative; z-index: 1; }
+
+  .skip {
+    position: fixed; top: 12px; left: 12px; z-index: 100;
+    transform: translateY(-56px); opacity: 0;
+    background: var(--surface); border: 1px solid var(--line); border-radius: 10px;
+    padding: 9px 13px; color: var(--text); font: 600 12px/1 var(--font-ui);
+    text-decoration: none; transition: transform .2s ease, opacity .2s ease;
+  }
+  .skip:focus-visible { transform: translateY(0); opacity: 1; }
+
+  /* top bar */
+  .bar {
+    display: flex; align-items: center; justify-content: space-between;
+    gap: 18px; padding: 6px 2px 24px;
+  }
+  .brand { display: flex; align-items: center; gap: 13px; min-width: 0; }
+  .brand-mark {
+    width: 42px; height: 42px; display: grid; place-items: center;
+    border: 1px solid color-mix(in srgb, var(--power) 45%, transparent);
+    border-radius: 12px; color: var(--power);
+    font: 700 20px/1 var(--mono);
+    background: linear-gradient(160deg, color-mix(in srgb, var(--power) 16%, transparent), color-mix(in srgb, var(--power) 3%, transparent));
+    box-shadow: inset 0 0 18px color-mix(in srgb, var(--power) 8%, transparent), 0 10px 24px -16px color-mix(in srgb, var(--power) 60%, transparent);
+  }
+  .brand-name { font: 650 14px/1.1 var(--mono); letter-spacing: .16em; }
+  .brand-sub {
+    margin-top: 5px; color: var(--muted); font-size: 12.5px;
+    white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 46vw;
+  }
+  .bar-actions { display: flex; align-items: center; gap: 8px; flex-shrink: 0; }
+
+  .status {
+    display: inline-flex; align-items: center; gap: 7px;
+    padding: 7px 11px; border: 1px solid var(--line); border-radius: 999px;
+    color: var(--muted); font: 600 11px/1 var(--mono); letter-spacing: .08em;
+    text-transform: uppercase; background: var(--surface-2);
+  }
+  .status .dot {
+    width: 7px; height: 7px; border-radius: 50%; background: var(--muted-2);
+    box-shadow: 0 0 0 3px color-mix(in srgb, var(--muted) 10%, transparent);
+  }
+  .status.live { color: var(--cadence); border-color: color-mix(in srgb, var(--cadence) 30%, transparent); }
+  .status.live .dot { background: var(--cadence); box-shadow: 0 0 0 3px color-mix(in srgb, var(--cadence) 14%, transparent); }
+  .status.busy { color: var(--warn); border-color: color-mix(in srgb, var(--warn) 30%, transparent); }
+  .status.busy .dot { background: var(--warn); animation: pulse 1.1s ease-in-out infinite; }
+  .status.err { color: var(--danger); border-color: color-mix(in srgb, var(--danger) 35%, transparent); }
+  .status.err .dot { background: var(--danger); }
+  @keyframes pulse { 50% { opacity: .35; } }
+
+  /* buttons */
+  .btn {
+    appearance: none; border: 1px solid var(--line); background: var(--surface-3);
+    color: var(--text); border-radius: 10px; padding: 9px 15px;
+    font: 600 12.5px/1 var(--font-ui);
+    cursor: pointer; white-space: nowrap;
+    transition: transform .16s ease, border-color .16s ease, background .16s ease,
+      color .16s ease, box-shadow .16s ease, filter .16s ease;
+  }
+  .btn:hover {
+    border-color: color-mix(in srgb, var(--text) 24%, var(--line));
+    transform: translateY(-1px);
+  }
+  .btn:active { transform: translateY(0) scale(.985); }
+  .btn.ghost { background: transparent; color: var(--muted); }
+  .btn.ghost:hover { color: var(--text); background: var(--hover); }
+  .btn.small { padding: 7px 11px; font-size: 11.5px; border-radius: 9px; }
+  .btn.icon {
+    padding: 8px 10px; line-height: 1;
+    display: inline-flex; align-items: center; justify-content: center;
+  }
+  .btn.icon svg { width: 16px; height: 16px; display: block; }
+  .btn.icon.active {
+    color: var(--power);
+    border-color: color-mix(in srgb, var(--power) 55%, transparent);
+    background: color-mix(in srgb, var(--power) 12%, transparent);
+  }
+  .btn:disabled { opacity: .45; cursor: wait; transform: none; }
+  .btn.primary {
+    background: var(--power); border-color: var(--power); color: #1a0c05;
+    font-weight: 700;
+    box-shadow: 0 12px 26px -16px color-mix(in srgb, var(--power) 75%, transparent);
+  }
+  .btn.primary:hover {
+    border-color: var(--power); filter: brightness(1.08);
+    box-shadow: 0 14px 30px -16px color-mix(in srgb, var(--power) 90%, transparent);
+  }
+  .btn.danger {
+    color: var(--danger); background: transparent;
+    border-color: color-mix(in srgb, var(--danger) 26%, transparent);
+  }
+  .btn.danger:hover {
+    color: var(--danger); background: color-mix(in srgb, var(--danger) 9%, transparent);
+    border-color: color-mix(in srgb, var(--danger) 55%, transparent);
+  }
+  .hidden { display: none !important; }
+
+  /* layout */
+  .hero {
+    display: grid;
+    grid-template-columns: minmax(0, 1.18fr) minmax(0, 1.22fr) minmax(0, .8fr) minmax(0, .8fr);
+    gap: 16px;
+  }
+  .main-grid {
+    display: grid;
+    grid-template-columns: minmax(0, 1.95fr) minmax(370px, .92fr);
+    gap: 16px; margin-top: 16px; align-items: stretch;
+  }
+  .lower-grid {
+    display: grid;
+    grid-template-columns: minmax(0, 1.28fr) minmax(300px, .9fr) minmax(0, .9fr);
+    gap: 16px; margin-top: 16px; align-items: stretch;
+  }
+  .debug-row { margin-top: 16px; }
+  .debug-row .card { padding: 14px 22px; }
+
+  .card {
+    background: linear-gradient(180deg, var(--surface), var(--surface-2));
+    border: 1px solid var(--line); border-radius: var(--radius);
+    padding: 20px 22px; min-width: 0;
+    box-shadow: inset 0 1px 0 var(--sheen), var(--shadow-card);
+  }
+
+  .label {
+    display: flex; align-items: center; justify-content: space-between; gap: 10px;
+    color: var(--muted); font: 600 10px/1 var(--mono);
+    letter-spacing: .18em; text-transform: uppercase;
+  }
+
+  .big {
+    display: flex; align-items: baseline; gap: 9px; margin-top: 16px;
+    font-family: var(--mono); font-variant-numeric: tabular-nums;
+    letter-spacing: -.055em; line-height: .92;
+  }
+  .big .num { font-size: clamp(58px, 7.4vw, 104px); font-weight: 600; }
+  .big .unit { color: var(--muted); font-size: 13px; letter-spacing: 0; font-weight: 500; }
+  .power .big { color: var(--power); }
+  .speed .big { color: var(--speed); }
+  .cadence .big { color: var(--cadence); }
+  .speed .big .num, .cadence .big .num { font-size: clamp(44px, 5.2vw, 74px); }
+
+  /* target card: the workout guide, intentionally the second loudest
+     surface after current power */
+  .target {
+    background:
+      radial-gradient(540px 280px at 100% 0%, color-mix(in srgb, var(--cadence) 11%, transparent), transparent 70%),
+      linear-gradient(180deg, var(--surface), var(--surface-2));
+  }
+  .target .big { color: var(--cadence); }
+  .target .big .num { font-size: clamp(52px, 6vw, 88px); }
+  .target-status {
+    padding: 4px 7px; border: 1px solid color-mix(in srgb, var(--cadence) 26%, transparent);
+    border-radius: 6px; color: var(--cadence);
+    font: 600 9px/1 var(--mono); letter-spacing: .08em; text-transform: uppercase;
+  }
+  .target.idle .target-status { color: var(--muted-2); border-color: var(--line-soft); }
+  .target.paused .target-status { color: var(--warn); border-color: color-mix(in srgb, var(--warn) 32%, transparent); }
+  .target.completed .target-status { color: var(--muted); border-color: var(--line); }
+  .target-body { margin-top: 16px; }
+  .target-row {
+    display: flex; align-items: baseline; justify-content: space-between; gap: 12px;
+    color: var(--muted); font: 500 11.5px/1.25 var(--mono);
+    font-variant-numeric: tabular-nums;
+  }
+  .target-row + .target-row { margin-top: 7px; }
+  .target-clock { color: var(--text); font-size: 12px; gap: 8px; }
+  .target-clock span { white-space: nowrap; }
+  .target-clock span:first-child { color: var(--cadence); }
+  .target.paused .target-clock span:first-child { color: var(--warn); }
+  .target.completed .target-clock span:first-child { color: var(--muted); }
+  .target-meter { height: 5px; margin-top: 13px; }
+  .target-meter > div {
+    background: linear-gradient(90deg, color-mix(in srgb, var(--cadence) 45%, transparent), var(--cadence));
+    transition: width .35s ease-out;
+  }
+  .target.paused .target-meter > div {
+    background: linear-gradient(90deg, color-mix(in srgb, var(--warn) 55%, transparent), var(--warn));
+  }
+  .target-next {
+    margin-top: 11px; padding-top: 10px; border-top: 1px solid var(--line-soft);
+    color: var(--muted-2); font: 500 10.5px/1.45 var(--mono);
+    min-height: 30px;
+  }
+  .target-next b { color: var(--text); font-weight: 600; }
+
+  .hero .card { position: relative; overflow: hidden; }
+  .hero .power {
+    background:
+      radial-gradient(430px 220px at 14% -6%, color-mix(in srgb, var(--power) 10%, transparent), transparent 68%),
+      linear-gradient(180deg, var(--surface), var(--surface-2));
+  }
+  .hero .speed {
+    background:
+      radial-gradient(380px 200px at 88% -8%, color-mix(in srgb, var(--speed) 9%, transparent), transparent 66%),
+      linear-gradient(180deg, var(--surface), var(--surface-2));
+  }
+  .hero .cadence {
+    background:
+      radial-gradient(380px 200px at 88% -8%, color-mix(in srgb, var(--cadence) 8%, transparent), transparent 66%),
+      linear-gradient(180deg, var(--surface), var(--surface-2));
+  }
+
+  .zone {
+    color: var(--muted-2); border: 1px solid var(--line-soft);
+    padding: 4px 7px; border-radius: 6px; letter-spacing: .06em;
+  }
+
+  .meter {
+    height: 7px; margin-top: 18px; border-radius: 99px; overflow: hidden;
+    background: var(--track);
+  }
+  .meter > div {
+    height: 100%; width: 0%; border-radius: 99px;
+    background: linear-gradient(90deg, color-mix(in srgb, var(--power) 55%, transparent), var(--power));
+    transition: width .35s ease-out, background .3s;
+  }
+  .sub {
+    display: flex; justify-content: space-between; flex-wrap: wrap; gap: 4px 8px;
+    margin-top: 8px; color: var(--muted-2); font: 500 10.5px/1 var(--mono);
+  }
+
+  .mini-chart { height: 44px; margin-top: 12px; }
+  .mini-chart canvas { width: 100%; height: 100%; display: block; }
+
+  /* chart card */
+  .card-head {
+    display: flex; align-items: flex-start; justify-content: space-between;
+    gap: 14px; margin-bottom: 14px;
+  }
+  .card-head h2 {
+    margin: 0; font: 600 15px/1.2 var(--font-ui);
+    letter-spacing: .01em;
+  }
+  .card-head p { margin: 5px 0 0; color: var(--muted-2); font-size: 11.5px; }
+
+  .legend { display: flex; gap: 14px; align-items: center; padding-top: 3px; }
+  .lg { display: inline-flex; align-items: center; gap: 6px; color: var(--muted); font: 500 10.5px/1 var(--mono); }
+  .lg::before { content: ""; width: 14px; height: 2px; border-radius: 2px; background: currentColor; }
+  .lg.power { color: var(--power); }
+  .lg.speed { color: var(--speed); }
+  .lg.target { color: var(--cadence); }
+  .lg.target::before {
+    background: repeating-linear-gradient(90deg, currentColor 0 4px, transparent 4px 7px);
+  }
+
+  .chart-card { display: flex; flex-direction: column; }
+  .chart-wrap { position: relative; height: 340px; flex: 1; min-height: 300px; }
+  #chart { position: absolute; inset: 0; width: 100%; height: 100%; display: block; }
+  .empty {
+    position: absolute; inset: 0; display: none; place-items: center;
+    color: var(--muted-2); font: 500 12px/1 var(--mono);
+  }
+  .empty.show { display: grid; }
+
+  /* stats */
+  .stats {
+    display: grid; grid-template-columns: 1fr 1fr; gap: 0;
+    margin: 4px 0 0; border-top: 1px solid var(--line-soft);
+  }
+  .stats > div {
+    display: flex; flex-direction: column; gap: 6px;
+    padding: 13px 0 12px; border-bottom: 1px solid var(--line-soft);
+  }
+  .stats > div:nth-child(odd) { padding-right: 14px; }
+  .stats > div:nth-child(even) { padding-left: 16px; border-left: 1px solid var(--line-soft); }
+  .stats dt { color: var(--muted-2); font: 600 9.5px/1 var(--mono); letter-spacing: .16em; text-transform: uppercase; }
+  .stats dd {
+    margin: 0; font: 500 20px/1 var(--mono); font-variant-numeric: tabular-nums;
+    letter-spacing: -.03em;
+  }
+  .stats dd small { color: var(--muted-2); font-size: 10px; letter-spacing: 0; }
+  .session-actions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 16px; }
+  .session-actions .btn { display: inline-block; text-decoration: none; }
+
+  /* trainer control */
+  .control-section { margin-top: 14px; }
+  .control-card { position: relative; overflow: hidden; }
+  .control-card::before {
+    content: ""; position: absolute; inset: 0 auto 0 0; width: 3px;
+    background: linear-gradient(180deg, var(--power), color-mix(in srgb, var(--power) 10%, transparent));
+  }
+  .control-head-right { display: flex; align-items: center; gap: 8px; }
+  .control-mode {
+    padding: 5px 9px; border: 1px solid var(--line); border-radius: 6px;
+    color: var(--muted); font: 600 9.5px/1 var(--mono); letter-spacing: .1em;
+    text-transform: uppercase;
+  }
+  .control-mode.active {
+    color: var(--power); border-color: color-mix(in srgb, var(--power) 40%, transparent);
+    background: color-mix(in srgb, var(--power) 8%, transparent);
+  }
+  .control-mode.erg {
+    color: var(--cadence); border-color: color-mix(in srgb, var(--cadence) 36%, transparent);
+    background: color-mix(in srgb, var(--cadence) 7%, transparent);
+  }
+  .control-mode.road {
+    color: var(--speed); border-color: color-mix(in srgb, var(--speed) 40%, transparent);
+    background: color-mix(in srgb, var(--speed) 8%, transparent);
+  }
+  .control-grid {
+    display: grid; grid-template-columns: 1.1fr .9fr; gap: 30px;
+    align-items: start;
+  }
+  .control-block { min-width: 0; }
+  .control-block.wide {
+    grid-column: 1 / -1;
+    border-top: 1px solid var(--line-soft);
+    padding-top: 20px;
+  }
+  .control-top {
+    display: flex; align-items: baseline; justify-content: space-between;
+    gap: 12px;
+  }
+  .control-value {
+    font: 600 30px/1 var(--mono); font-variant-numeric: tabular-nums;
+    letter-spacing: -.04em; color: var(--text);
+  }
+  .control-value small { color: var(--muted-2); font-size: 12px; letter-spacing: 0; }
+  .control-value.idle { color: var(--muted-2); }
+  .control-actual {
+    color: var(--muted-2); font: 500 11px/1.3 var(--mono);
+    margin-top: 6px; font-variant-numeric: tabular-nums;
+  }
+  .control-actual b { color: var(--text); font-weight: 600; }
+  .control-actual.moving b { color: var(--power); }
+  #resistanceSlider {
+    -webkit-appearance: none; appearance: none; width: 100%; height: 7px;
+    margin: 17px 0 8px; border-radius: 99px; outline: none; cursor: pointer;
+    background: linear-gradient(
+      90deg,
+      var(--power) 0%, var(--power) var(--fill, 0%),
+      var(--track) var(--fill, 0%), var(--track) 100%
+    );
+  }
+  #resistanceSlider::-webkit-slider-thumb {
+    -webkit-appearance: none; width: 20px; height: 20px; border-radius: 50%;
+    background: var(--surface); border: 4px solid var(--power); cursor: grab;
+    box-shadow: 0 3px 12px color-mix(in srgb, var(--power) 40%, transparent);
+  }
+  #resistanceSlider::-moz-range-thumb {
+    width: 14px; height: 14px; border-radius: 50%; background: var(--surface);
+    border: 4px solid var(--power); cursor: grab;
+    box-shadow: 0 3px 12px color-mix(in srgb, var(--power) 40%, transparent);
+  }
+  #resistanceSlider:disabled { opacity: .35; cursor: not-allowed; }
+  #resistanceSlider:disabled::-webkit-slider-thumb { cursor: not-allowed; }
+  .control-scale {
+    display: flex; justify-content: space-between; color: var(--muted-2);
+    font: 500 10px/1 var(--mono); margin-bottom: 12px;
+  }
+  .erg-row { display: flex; gap: 8px; margin-top: 17px; }
+  .erg-row input {
+    flex: 1; min-width: 0; background: var(--field); border: 1px solid var(--line);
+    border-radius: 9px; color: var(--text); padding: 10px 12px;
+    font: 500 15px/1 var(--mono);
+  }
+  .erg-row input:focus { outline: none; border-color: color-mix(in srgb, var(--cadence) 55%, transparent); }
+  .erg-row input:disabled { opacity: .4; }
+  .control-hint {
+    color: var(--muted-2); font-size: 11px; line-height: 1.45; margin: 12px 0 0;
+  }
+  .control-hint b { color: var(--muted); font-weight: 600; }
+  .control-card .btn:disabled { cursor: not-allowed; }
+  .control-card input:disabled { cursor: not-allowed; }
+
+  /* workout panel */
+  .workout-panel { display: flex; flex-direction: column; min-height: 0; }
+  .workout-panel .card-head { margin-bottom: 8px; }
+  .workout-head-side { display: flex; align-items: center; gap: 7px; }
+  .workout-plan-link {
+    padding: 5px 8px; border: 1px solid var(--line); border-radius: 6px;
+    color: var(--muted); font: 600 9px/1 var(--mono);
+    letter-spacing: .08em; text-transform: uppercase; white-space: nowrap;
+    text-decoration: none;
+  }
+  .workout-plan-link:hover { color: var(--text); border-color: var(--muted-2); }
+  .workout-chip {
+    padding: 5px 8px; border: 1px solid var(--line); border-radius: 6px;
+    color: var(--muted); font: 600 9px/1 var(--mono);
+    letter-spacing: .08em; text-transform: uppercase; white-space: nowrap;
+  }
+  .workout-chip.live { color: var(--cadence); border-color: color-mix(in srgb, var(--cadence) 34%, transparent); }
+  .workout-chip.paused { color: var(--warn); border-color: color-mix(in srgb, var(--warn) 32%, transparent); }
+  .workout-list {
+    max-height: 340px; overflow: auto; padding-right: 2px;
+    border-top: 1px solid var(--line-soft);
+  }
+  .workout-row {
+    appearance: none; display: block; width: 100%; text-align: left;
+    background: transparent; color: var(--text); border: 0;
+    border-top: 1px solid var(--line-soft); border-radius: 0;
+    padding: 10px 8px 11px; margin: 0; cursor: pointer; font-family: inherit;
+    transition: background .15s ease, box-shadow .15s ease;
+  }
+  .workout-row:first-child { border-top: 0; }
+  .workout-row:hover { background: var(--hover); }
+  .workout-row.selected {
+    background: color-mix(in srgb, var(--cadence) 7%, transparent);
+    box-shadow: inset 2px 0 0 var(--cadence);
+  }
+  .workout-row.selected .workout-row-name { color: var(--cadence); }
+  .workout-row-top {
+    display: flex; align-items: baseline; justify-content: space-between; gap: 10px;
+  }
+  .workout-row-name {
+    font-size: 12.5px; font-weight: 600; white-space: nowrap;
+    overflow: hidden; text-overflow: ellipsis;
+  }
+  .workout-row-time {
+    color: var(--muted); font: 500 10.5px/1 var(--mono);
+    font-variant-numeric: tabular-nums; white-space: nowrap;
+  }
+  .workout-spark {
+    display: flex; align-items: flex-end; gap: 1px; height: 24px;
+    margin-top: 7px; padding-bottom: 1px; border-bottom: 1px solid var(--line-soft);
+  }
+  .workout-spark span {
+    flex-grow: 1; min-width: 1px; border-radius: 1px 1px 0 0;
+    background: color-mix(in srgb, var(--cadence) 34%, transparent);
+  }
+  .workout-spark span.hot { background: color-mix(in srgb, var(--cadence) 66%, transparent); }
+  .workout-row-meta {
+    display: flex; align-items: center; gap: 6px; flex-wrap: wrap;
+    margin-top: 6px; color: var(--muted-2); font: 500 9.5px/1.3 var(--mono);
+  }
+  .workout-row-meta .base {
+    padding: 2px 4px; border: 1px solid var(--line-soft); border-radius: 4px;
+    color: var(--muted); font-size: 8.5px; letter-spacing: .05em; text-transform: uppercase;
+  }
+  .workout-panel-actions {
+    display: flex; gap: 7px; align-items: center; margin-top: 12px;
+  }
+  .workout-panel-actions .btn.primary { flex: 1; }
+  .workout-note {
+    margin: 11px 0 0; color: var(--muted-2); font-size: 10.5px; line-height: 1.45;
+  }
+  .workout-guide {
+    margin-top: 12px; padding-top: 10px;
+    border-top: 1px solid var(--line-soft);
+  }
+  .workout-guide summary {
+    cursor: pointer; color: var(--muted);
+    font: 600 10px/1 var(--mono); letter-spacing: .08em;
+    text-transform: uppercase;
+  }
+  .workout-guide summary:hover { color: var(--text); }
+  .workout-guide-body {
+    max-height: 320px; overflow: auto; margin-top: 9px; padding-right: 4px;
+    color: #c8cec7; font-size: 12px; line-height: 1.6;
+    white-space: pre-line;
+  }
+  .workout-active-head {
+    display: flex; align-items: flex-start; justify-content: space-between;
+    gap: 12px; margin-top: 8px;
+  }
+  .workout-active-name { font-size: 15px; font-weight: 600; }
+  .workout-active-meta {
+    color: var(--muted); font: 500 10.5px/1.4 var(--mono);
+    font-variant-numeric: tabular-nums; text-align: right; white-space: nowrap;
+  }
+  .workout-overall { height: 4px; margin-top: 11px; }
+  .workout-overall > div {
+    background: linear-gradient(90deg, color-mix(in srgb, var(--cadence) 40%, transparent), var(--cadence));
+    transition: width .35s ease-out;
+  }
+  .timeline {
+    max-height: 290px; overflow: auto; margin-top: 12px;
+    border-top: 1px solid var(--line-soft);
+  }
+  .timeline-row {
+    display: grid; grid-template-columns: 24px minmax(0, 1fr) 48px 56px;
+    gap: 8px; align-items: center; padding: 7px 7px;
+    border-bottom: 1px solid var(--line-soft);
+    color: var(--muted); font-size: 11.5px;
+  }
+  .timeline-row:last-child { border-bottom: 0; }
+  .timeline-row.done { color: var(--muted-2); }
+  .timeline-row.done .timeline-duration,
+  .timeline-row.done .timeline-power { color: var(--muted-2); }
+  .timeline-row.current {
+    background: color-mix(in srgb, var(--cadence) 8%, transparent);
+    box-shadow: inset 2px 0 0 var(--cadence);
+    color: var(--text);
+  }
+  .timeline-row.current .timeline-label,
+  .timeline-row.current .timeline-power { color: var(--cadence); }
+  .timeline-index { color: var(--muted-2); font: 500 9.5px/1 var(--mono); }
+  .timeline-label { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .timeline-duration, .timeline-power {
+    color: var(--muted); font: 500 10px/1 var(--mono);
+    font-variant-numeric: tabular-nums; text-align: right; white-space: nowrap;
+  }
+  .workout-controls {
+    display: flex; gap: 7px; margin-top: 12px; padding-top: 12px;
+    border-top: 1px solid var(--line-soft);
+  }
+  .workout-controls .btn:first-child { flex: 1; }
+
+  /* workout editor */
+  .workout-sheet { width: min(920px, 100%); }
+  .sheet-sub { margin: 5px 0 0; color: var(--muted-2); font-size: 11.5px; }
+  .workout-form .field { margin-top: 12px; }
+  .workout-form .field input[type="text"],
+  .workout-form .field textarea {
+    background: var(--field); border: 1px solid var(--line); border-radius: 9px;
+    color: var(--text); padding: 10px 12px; font: 500 13px/1.45 var(--font-ui);
+    width: 100%;
+  }
+  .workout-form .field textarea { min-height: 110px; resize: vertical; }
+  .workout-form .field input[type="text"]:focus,
+  .workout-form .field textarea:focus {
+    outline: none; border-color: color-mix(in srgb, var(--cadence) 55%, transparent);
+  }
+  .interval-editor-head {
+    display: flex; align-items: baseline; justify-content: space-between; gap: 12px;
+    margin-top: 20px; padding-top: 14px; border-top: 1px solid var(--line-soft);
+  }
+  .interval-editor-total {
+    color: var(--muted-2); font: 500 10.5px/1 var(--mono);
+    font-variant-numeric: tabular-nums;
+  }
+  .interval-head {
+    display: grid;
+    grid-template-columns: 28px minmax(130px, 1fr) 54px 10px 54px 76px 26px;
+    gap: 7px; align-items: center; padding: 13px 4px 6px;
+    color: var(--muted-2); font: 600 9px/1 var(--mono);
+    letter-spacing: .08em; text-transform: uppercase;
+  }
+  .interval-head span:nth-child(3),
+  .interval-head span:nth-child(5),
+  .interval-head span:nth-child(6) { text-align: right; }
+  .interval-rows { display: flex; flex-direction: column; }
+  .interval-row {
+    display: grid;
+    grid-template-columns: 28px minmax(130px, 1fr) 54px 10px 54px 76px 26px;
+    gap: 7px; align-items: center; padding: 7px 4px;
+    border-top: 1px solid var(--line-soft);
+  }
+  .interval-num { color: var(--muted-2); font: 500 10px/1 var(--mono); }
+  .interval-row input {
+    width: 100%; min-width: 0; background: var(--field); border: 1px solid var(--line);
+    border-radius: 7px; color: var(--text); padding: 8px 8px;
+    font: 500 12px/1 var(--mono); font-variant-numeric: tabular-nums;
+  }
+  .interval-row input:focus { outline: none; border-color: color-mix(in srgb, var(--cadence) 55%, transparent); }
+  .interval-row input.interval-label {
+    font: 500 12px/1 var(--font-ui);
+  }
+  .interval-colon { color: var(--muted-2); font: 500 12px/1 var(--mono); text-align: center; }
+  .interval-remove {
+    appearance: none; border: 0; background: transparent; color: var(--muted-2);
+    font: 400 18px/1 var(--font-ui); cursor: pointer; padding: 2px;
+    border-radius: 5px;
+  }
+  .interval-remove:hover { color: var(--danger); background: color-mix(in srgb, var(--danger) 9%, transparent); }
+  .workout-add { margin-top: 10px; }
+  .workout-preview {
+    display: block; width: 100%; height: 72px;
+    margin-top: 16px; border: 1px solid var(--line-soft); border-radius: 8px;
+    background: var(--field);
+  }
+  .sheet-actions {
+    display: flex; align-items: center; justify-content: flex-end; gap: 8px;
+    margin-top: 18px; padding-top: 14px; border-top: 1px solid var(--line-soft);
+  }
+  .sheet-actions .btn.ghost.danger { margin-right: auto; }
+  .sheet-panel.workout-sheet {
+    display: flex; flex-direction: column; overflow: hidden;
+  }
+  .sheet-panel.workout-sheet .sheet-head { flex: none; }
+  .sheet-panel.workout-sheet .workout-form {
+    flex: 1; min-height: 0; overflow-y: auto; padding-right: 4px;
+    scrollbar-width: thin; scrollbar-color: var(--line) transparent;
+  }
+  .sheet-panel.workout-sheet .sheet-actions {
+    flex: none; margin: 18px -22px 0; padding: 14px 22px 2px;
+    background: var(--surface);
+  }
+
+  @media (max-width: 760px) {
+    .control-grid { grid-template-columns: 1fr; gap: 22px; }
+    .control-card::before { width: 100%; height: 2px; inset: 0 0 auto 0; }
+  }
+
+  /* sessions */
+  .sessions { display: flex; flex-direction: column; max-height: 270px; overflow: auto; }
+  .session-row {
+    display: grid; grid-template-columns: 1fr auto auto; align-items: center;
+    gap: 14px; padding: 10px 0; border-top: 1px solid var(--line-soft);
+    font-size: 12.5px;
+  }
+  .session-row:first-child { border-top: 0; }
+  .session-row .when { color: var(--muted); }
+  .session-row .fig { font-family: var(--mono); font-variant-numeric: tabular-nums; color: var(--text); }
+  .session-row .fig small { color: var(--muted-2); }
+  .session-links { display: flex; gap: 10px; }
+  .session-row a { color: var(--muted-2); text-decoration: none; font: 600 10.5px/1 var(--mono); letter-spacing: .06em; }
+  .session-row a:hover { color: var(--power); }
+  .no-sessions { color: var(--muted-2); font: 500 12px/1.4 var(--mono); padding: 10px 0 2px; }
+
+  /* debug */
+  .debug summary {
+    cursor: pointer; color: var(--muted); font: 600 11px/1 var(--mono);
+    letter-spacing: .1em; text-transform: uppercase; list-style: none;
+    display: flex; justify-content: space-between;
+  }
+  .debug summary::-webkit-details-marker { display: none; }
+  .debug summary span { color: var(--muted-2); }
+  .raw {
+    margin-top: 12px; max-height: 168px; overflow: auto;
+    font: 10.5px/1.55 var(--mono); color: var(--muted);
+  }
+  .raw .line { display: flex; gap: 8px; white-space: nowrap; }
+  .raw .line b { color: var(--speed); font-weight: 500; }
+  .raw .line i { color: var(--muted-2); font-style: normal; }
+
+  .source-detail {
+    margin-top: 14px; padding-top: 12px; border-top: 1px solid var(--line-soft);
+  }
+  .source-table {
+    width: 100%; border-collapse: collapse;
+    font: 10.5px/1.55 var(--mono); color: var(--muted);
+  }
+  .source-table th {
+    text-align: left; padding: 0 10px 5px 0; color: var(--muted-2);
+    font: 500 9.5px/1 var(--mono); letter-spacing: .08em; text-transform: uppercase;
+  }
+  .source-table td { padding: 2px 10px 2px 0; }
+  .source-table td:first-child { color: var(--muted-2); }
+  .source-table .active { color: var(--text); font-weight: 600; }
+  .source-table .bad { color: var(--power); text-decoration: line-through; }
+  .source-note, .rejected-list {
+    margin-top: 7px; color: var(--muted-2); font: 10px/1.45 var(--mono);
+  }
+  .rejected-list { color: var(--power); }
+
+  /* sheets */
+  .sheet { position: fixed; inset: 0; z-index: 50; display: grid; place-items: center; padding: 18px; }
+  .sheet[hidden] { display: none; }
+  .sheet-backdrop { position: absolute; inset: 0; background: var(--scrim); backdrop-filter: blur(3px); }
+  .sheet-panel {
+    position: relative; width: min(560px, 100%); max-height: 82vh; overflow: auto;
+    background: var(--surface); border: 1px solid var(--line); border-radius: 20px;
+    padding: 22px; box-shadow: var(--shadow-pop);
+  }
+  .sheet-panel.workout-sheet { width: min(900px, 100%); max-height: 88vh; }
+  .sheet-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 8px; }
+  .sheet-head h2 { margin: 0; font: 600 16px/1.2 var(--font-ui); }
+  .sheet-note { color: var(--muted-2); font-size: 11.5px; line-height: 1.5; margin: 14px 0 0; }
+
+  .scan-list { display: flex; flex-direction: column; margin-top: 8px; }
+  .scan-row {
+    display: grid; grid-template-columns: 1fr auto; gap: 10px; align-items: center;
+    padding: 12px 0; border-top: 1px solid var(--line-soft); cursor: pointer;
+  }
+  .scan-row:first-child { border-top: 0; }
+  .scan-row:hover .scan-name { color: var(--power); }
+  .scan-name { font-weight: 600; font-size: 13.5px; }
+  .scan-meta { color: var(--muted-2); font: 10.5px/1.5 var(--mono); margin-top: 4px; }
+  .badge {
+    display: inline-block; margin-right: 5px; padding: 3px 6px; border-radius: 5px;
+    border: 1px solid var(--line); color: var(--muted); font: 600 9px/1 var(--mono);
+    letter-spacing: .05em;
+  }
+  .rssi { font: 600 11px/1 var(--mono); color: var(--muted); }
+
+  .field { display: flex; flex-direction: column; gap: 7px; margin-top: 14px; }
+  .field label { color: var(--muted); font: 600 10.5px/1 var(--mono); letter-spacing: .1em; text-transform: uppercase; }
+  .presets { display: flex; flex-wrap: wrap; gap: 6px; }
+  .field input[type="number"] {
+    background: var(--field); border: 1px solid var(--line); border-radius: 9px;
+    color: var(--text); padding: 10px 12px; font: 500 14px/1 var(--mono); width: 100%;
+  }
+  .field input:focus { outline: none; border-color: color-mix(in srgb, var(--power) 55%, transparent); }
+  .field .hint { color: var(--muted-2); font-size: 11px; line-height: 1.4; }
+  .check { display: flex; align-items: center; gap: 9px; margin-top: 16px; color: var(--muted); font-size: 12.5px; }
+
+  /* toast */
+  .toast {
+    position: fixed; left: 50%; bottom: 26px; transform: translate(-50%, 16px);
+    background: var(--surface-3); border: 1px solid var(--line); color: var(--text);
+    padding: 11px 16px; border-radius: 10px; font: 500 12.5px/1.4 var(--font-ui);
+    opacity: 0; pointer-events: none; transition: opacity .2s, transform .2s;
+    z-index: 80; max-width: 90vw; text-align: center;
+  }
+  .toast.show { opacity: 1; transform: translate(-50%, 0); }
+  .toast.err { border-color: color-mix(in srgb, var(--danger) 50%, transparent); color: var(--danger); }
+
+  @media (max-width: 1240px) {
+    .app { padding: 20px 24px 52px; }
+    .hero { grid-template-columns: 1.15fr 1.15fr .8fr .8fr; }
+    .lower-grid { grid-template-columns: minmax(0, 1.2fr) minmax(300px, .8fr); }
+    .sessions-card { grid-column: 1 / -1; }
+  }
+  @media (max-width: 1040px) {
+    .hero { grid-template-columns: 1fr 1fr; }
+    .main-grid { grid-template-columns: 1fr; }
+    .lower-grid { grid-template-columns: 1fr; }
+    .sessions-card { grid-column: auto; }
+  }
+  @media (max-width: 760px) {
+    .app { padding: 14px 14px 44px; }
+    .bar { flex-wrap: wrap; padding-bottom: 16px; }
+    .bar-actions { width: 100%; justify-content: flex-end; }
+    .brand-sub { max-width: 60vw; }
+    .hero { gap: 10px; }
+    .card { padding: 16px; border-radius: 14px; }
+    .chart-wrap { height: 250px; }
+    .stats dd { font-size: 18px; }
+    .interval-head { display: none; }
+    .interval-row {
+      grid-template-columns: 22px minmax(90px, 1fr) 44px 8px 44px 64px 24px;
+      gap: 5px;
+    }
+  }
+  @media (max-width: 560px) {
+    .hero { grid-template-columns: 1fr; }
+    .workout-panel-actions { flex-wrap: wrap; }
+    .workout-panel-actions .btn.primary { flex-basis: 100%; }
+  }
+</style>
+</head>
+<body>
+<a class="skip" href="#main">Vai al contenuto</a>
+<div class="app">
+  <header class="bar">
+    <div class="brand">
+      <div class="brand-mark">Q</div>
+      <div>
+        <div class="brand-name">QUBO LIVE</div>
+        <div class="brand-sub" id="deviceLabel">nessun dispositivo connesso</div>
+      </div>
+    </div>
+    <div class="bar-actions">
+      <div class="status" id="statusPill"><span class="dot"></span><span id="statusText">offline</span></div>
+      <button class="btn" id="btnScan">Cerca sensore</button>
+      <button class="btn ghost hidden" id="btnDisconnect">Disconnetti</button>
+      <button class="btn ghost icon" id="btnMini" type="button" aria-label="Apri mini player" aria-pressed="false" title="Mini player">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="5" width="18" height="14" rx="2"/><rect x="12" y="11" width="7" height="6" rx="1"/></svg>
+      </button>
+      <button class="btn ghost icon" id="btnTheme" type="button" aria-label="Passa al tema chiaro" title="Tema chiaro">
+        <svg class="icon-sun" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" aria-hidden="true"><circle cx="12" cy="12" r="4.2"/><path d="M12 3v2M12 19v2M3 12h2M19 12h2M5.6 5.6l1.5 1.5M16.9 16.9l1.5 1.5M18.4 5.6L16.9 7.1M7.1 16.9l-1.5 1.5"/></svg>
+        <svg class="icon-moon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="display:none"><path d="M20 14.5A8.5 8.5 0 0 1 9.5 4a8.5 8.5 0 1 0 10.5 10.5Z"/></svg>
+      </button>
+      <button class="btn ghost icon" id="btnSettings" title="Impostazioni" aria-label="Impostazioni">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 8.7a3.3 3.3 0 1 0 0 6.6 3.3 3.3 0 0 0 0-6.6Z"/><path d="M19.3 14.7a1.62 1.62 0 0 0 .33 1.79l.06.06a1.95 1.95 0 1 1-2.76 2.76l-.06-.06a1.62 1.62 0 0 0-1.79-.33 1.62 1.62 0 0 0-.98 1.48v.17a1.95 1.95 0 1 1-3.9 0v-.09a1.62 1.62 0 0 0-1.06-1.48 1.62 1.62 0 0 0-1.79.33l-.06.06a1.95 1.95 0 1 1-2.76-2.76l.06-.06a1.62 1.62 0 0 0 .33-1.79 1.62 1.62 0 0 0-1.48-.98H3a1.95 1.95 0 1 1 0-3.9h.09a1.62 1.62 0 0 0 1.48-1.06 1.62 1.62 0 0 0-.33-1.79l-.06-.06a1.95 1.95 0 1 1 2.76-2.76l.06.06a1.62 1.62 0 0 0 1.79.33h.08a1.62 1.62 0 0 0 .98-1.48V3a1.95 1.95 0 1 1 3.9 0v.09a1.62 1.62 0 0 0 .98 1.48 1.62 1.62 0 0 0 1.79-.33l.06-.06a1.95 1.95 0 1 1 2.76 2.76l-.06.06a1.62 1.62 0 0 0-.33 1.79v.08a1.62 1.62 0 0 0 1.48.98H21a1.95 1.95 0 1 1 0 3.9h-.09a1.62 1.62 0 0 0-1.48.98Z"/></svg>
+      </button>
+    </div>
+  </header>
+
+  <main id="main">
+    <section class="hero">
+      <article class="card power">
+        <div class="label"><span>Potenza</span><span class="zone" id="zoneBadge">-</span></div>
+        <div class="big"><span class="num" id="power">0</span><span class="unit">W</span></div>
+        <div class="meter"><div id="powerBar"></div></div>
+        <div class="sub"><span id="ftpLabel">FTP 179 W</span><span id="powerWkg">0,0 W/kg</span><span id="powerPct">0%</span></div>
+      </article>
+
+      <article class="card target idle" id="targetCard">
+        <div class="label"><span>Target</span><span class="target-status" id="targetStatus">pronto</span></div>
+        <div class="big"><span class="num" id="targetPower">-</span><span class="unit">W</span></div>
+        <div class="target-body">
+          <div class="target-row"><span id="targetInterval">Nessun allenamento attivo</span><span id="targetPct"></span></div>
+          <div class="target-row target-clock"><span id="targetRemaining">Scegli un workout</span><span id="targetElapsed"></span></div>
+          <div class="meter target-meter"><div id="targetBar"></div></div>
+          <div class="target-next" id="targetNext">Il target è una guida: pedala per restare vicino alla linea.</div>
+        </div>
+      </article>
+
+      <article class="card speed">
+        <div class="label"><span>Velocità</span></div>
+        <div class="big"><span class="num" id="speed">0</span><span class="unit">km/h</span></div>
+        <div class="mini-chart"><canvas id="speedSpark"></canvas></div>
+      </article>
+
+      <article class="card cadence">
+        <div class="label"><span>Cadenza</span></div>
+        <div class="big"><span class="num" id="cadence">0</span><span class="unit">rpm</span></div>
+        <div class="mini-chart"><canvas id="cadenceSpark"></canvas></div>
+      </article>
+    </section>
+
+    <section class="main-grid">
+      <article class="card chart-card">
+        <div class="card-head">
+          <div><h2 id="chartTitle">Andamento</h2><p id="chartWindow">finestra mobile</p></div>
+          <div class="legend" id="chartLegend"><span class="lg power">potenza</span><span class="lg speed">velocità</span></div>
+        </div>
+        <div class="chart-wrap">
+          <canvas id="chart"></canvas>
+          <div class="empty show" id="chartEmpty">in attesa di dati…</div>
+        </div>
+      </article>
+
+      <aside class="card workout-panel">
+        <div class="card-head">
+          <div><h2>Allenamento</h2><p id="workoutState">libreria</p></div>
+          <div class="workout-head-side">
+            <a class="workout-plan-link" href="/piano" target="_blank" rel="noopener">Piano</a>
+            <span class="workout-chip" id="workoutChip">nessuno</span>
+          </div>
+        </div>
+
+        <div id="workoutIdle">
+          <div class="workout-list" id="workoutList">
+            <div class="no-sessions">Caricamento allenamenti…</div>
+          </div>
+          <div class="workout-panel-actions">
+            <button class="btn primary" id="btnStartWorkout" type="button" disabled>Avvia allenamento</button>
+            <button class="btn small ghost" id="btnEditWorkout" type="button" disabled>Modifica</button>
+            <button class="btn small ghost" id="btnNewWorkout" type="button">Nuovo</button>
+            <a class="btn small ghost" href="/piano" target="_blank" rel="noopener">Piano</a>
+          </div>
+          <details class="workout-guide" id="workoutGuide" open>
+            <summary>Note e istruzioni</summary>
+            <div class="workout-guide-body" id="workoutGuideBody">Seleziona un allenamento per vedere cosa fare, cadenza, resistenza e nutrizione.</div>
+          </details>
+          <p class="workout-note">Il profilo target è una guida. La potenza reale resta quella che spingi tu.</p>
+        </div>
+
+        <div id="workoutActive" class="hidden">
+          <div class="workout-active-head">
+            <div class="workout-active-name" id="workoutActiveName">-</div>
+            <div class="workout-active-meta" id="workoutActiveMeta">-</div>
+          </div>
+          <div class="meter workout-overall"><div id="workoutOverallBar"></div></div>
+          <div class="timeline" id="workoutTimeline"></div>
+          <div class="workout-controls">
+            <button class="btn" id="btnPauseWorkout" type="button">Pausa</button>
+            <button class="btn ghost danger" id="btnStopWorkout" type="button">Termina</button>
+          </div>
+        </div>
+      </aside>
+    </section>
+
+    <section class="lower-grid">
+      <article class="card control-card">
+        <div class="card-head">
+          <div>
+            <h2>Controllo rullo</h2>
+            <p id="controlStatus">verifica disponibilità…</p>
+          </div>
+          <div class="control-head-right">
+            <span class="control-mode" id="controlMode">off</span>
+          </div>
+        </div>
+        <div class="control-grid">
+          <div class="control-block">
+            <div class="control-top">
+              <span class="label">Resistenza · target</span>
+              <span class="control-value idle" id="resistanceValue">-</span>
+            </div>
+            <div class="control-actual" id="actualResistance">attuale -</div>
+            <input type="range" id="resistanceSlider" min="0" max="20" step="0.1" value="0" disabled>
+            <div class="control-scale"><span>0 · facile</span><span>20 · duro</span></div>
+            <div class="presets control-presets">
+              <button type="button" class="btn small ghost" data-resistance="0" disabled>0</button>
+              <button type="button" class="btn small ghost" data-resistance="5" disabled>5</button>
+              <button type="button" class="btn small ghost" data-resistance="10" disabled>10</button>
+              <button type="button" class="btn small ghost" data-resistance="15" disabled>15</button>
+              <button type="button" class="btn small ghost" data-resistance="20" disabled>20</button>
+            </div>
+          </div>
+          <div class="control-block">
+            <div class="control-top">
+              <span class="label">ERG · target power</span>
+              <span class="control-value idle" id="ergValue">off</span>
+            </div>
+            <div class="erg-row">
+              <input type="number" id="ergInput" min="0" max="4000" step="1" placeholder="watt" disabled>
+              <button class="btn small" id="btnErg" disabled>Attiva ERG</button>
+            </div>
+            <p class="control-hint" id="controlHint">
+              Lo slider cambia la durezza. In <b>ERG</b> il rullo insegue i watt
+              scelti; l'app invia <b>Start/Resume</b> prima di ogni comando.
+              La riga «attuale» è il freno reale e si muove in 15-20 secondi.
+            </p>
+          </div>
+          <div class="control-block wide">
+            <div class="control-top">
+              <span class="label">Strada · simulazione</span>
+              <span class="control-value idle" id="roadValue">off</span>
+            </div>
+            <div class="erg-row">
+              <button class="btn small" id="btnRoad" disabled>Attiva strada</button>
+            </div>
+            <p class="control-hint" id="roadHint">
+              Strada piatta: il rullo adatta da solo la resistenza alla velocità
+              (Crr 0,005, CdA 0,35). Questa modalità invia comandi FTMS al rullo.
+            </p>
+          </div>
+        </div>
+      </article>
+
+      <aside class="card session-card">
+        <div class="card-head">
+          <div><h2>Sessione</h2><p id="sessionId">-</p></div>
+          <button class="btn small ghost" id="btnReset">Nuova</button>
+        </div>
+        <dl class="stats">
+          <div><dt>Tempo</dt><dd id="duration">00:00</dd></div>
+          <div><dt>Distanza</dt><dd id="distance">0.00 <small>km</small></dd></div>
+          <div><dt>Media</dt><dd id="avgPower">0 <small>W</small></dd></div>
+          <div><dt>Max</dt><dd id="maxPower">0 <small>W</small></dd></div>
+          <div><dt>Media vel.</dt><dd id="avgSpeed">0 <small>km/h</small></dd></div>
+          <div><dt>Max vel.</dt><dd id="maxSpeed">0 <small>km/h</small></dd></div>
+          <div><dt>Calorie</dt><dd id="calories">0 <small>kcal</small></dd></div>
+          <div><dt>W/kg</dt><dd id="avgWkg">0,0 <small>W/kg</small></dd></div>
+        </dl>
+        <div class="session-actions">
+          <a class="btn small" id="btnTcx" href="/api/export.tcx">Scarica TCX</a>
+          <a class="btn small ghost" id="btnCsv" href="/api/export.csv">CSV</a>
+        </div>
+      </aside>
+
+      <article class="card sessions-card">
+        <div class="card-head">
+          <div><h2>Attività salvate</h2><p>sessioni complete sul disco</p></div>
+          <button class="btn small ghost" id="btnRefresh">Aggiorna</button>
+        </div>
+        <div class="sessions" id="sessions"><div class="no-sessions">Caricamento…</div></div>
+      </article>
+    </section>
+
+    <section class="debug-row">
+      <article class="card debug">
+        <details id="debugDetails">
+          <summary>Debug BLE · <span id="sourceLabel">-</span><span id="rawCount">0 frame</span></summary>
+          <div class="source-detail" id="sourceDetail"></div>
+          <div class="raw" id="rawLog"></div>
+        </details>
+      </article>
+    </section>
+  </main>
+</div>
+
+<div class="sheet" id="scanSheet" hidden>
+  <div class="sheet-backdrop" data-close></div>
+  <div class="sheet-panel">
+    <div class="sheet-head"><h2>Dispositivi vicini</h2><button class="btn ghost icon" data-close aria-label="Chiudi">&times;</button></div>
+    <div class="scan-list" id="scanList"></div>
+    <p class="sheet-note">Il sensore deve essere sveglio (pedala due giri) e non già connesso a Zwift o My E-Training. La ricerca dura qualche secondo.</p>
+  </div>
+</div>
+
+<div class="sheet" id="settingsSheet" hidden>
+  <div class="sheet-backdrop" data-close></div>
+  <div class="sheet-panel">
+    <div class="sheet-head"><h2>Impostazioni</h2><button class="btn ghost icon" data-close aria-label="Chiudi">&times;</button></div>
+    <div class="field">
+      <label for="wheelInput">Circonferenza / sviluppo (mm)</label>
+      <div class="presets">
+        <button type="button" class="btn small ghost" data-wheel="94">Power Mag · 94</button>
+        <button type="button" class="btn small ghost" data-wheel="47">Qubo Digital · 47</button>
+        <button type="button" class="btn small ghost" data-wheel="2105">Ruota 700x25 · 2105</button>
+      </div>
+      <input type="number" id="wheelInput" min="40" max="2500" step="1" value="94">
+      <div class="hint">La velocità live usa il dato <b>FTMS</b> del rullo; questo valore serve per i profili CPS/CSC di riserva e per la diagnostica. Power Mag: <b>94 mm</b>. Qubo Digital: <b>47 mm</b>. Ruota reale 700x25c: 2105.</div>
+    </div>
+    <div class="field">
+      <label for="ftpInput">FTP (W)</label>
+      <input type="number" id="ftpInput" min="50" max="600" step="1" value="179">
+      <div class="hint">Serve per le zone di intensità, per il W/kg e per i target degli allenamenti.</div>
+    </div>
+    <div class="field">
+      <label for="weightInput">Peso (kg)</label>
+      <input type="number" id="weightInput" min="30" max="200" step="0.1" value="82">
+      <div class="hint">Serve per calcolare W/kg e calorie bruciate.</div>
+    </div>
+    <div class="field">
+      <label for="powerOffsetInput">Calibrazione potenza (W)</label>
+      <input type="number" id="powerOffsetInput" min="-100" max="300" step="1" value="30">
+      <div class="hint">Offset aggiunto alla potenza del rullo quando è in movimento. Il Qubo Digital tende a leggere <b>10-50 W in meno</b>: alza l'offset se la lettura resta bassa. Vale anche per le registrazioni.</div>
+    </div>
+    <div class="field">
+      <label for="speedOffsetInput">Calibrazione velocità (km/h)</label>
+      <input type="number" id="speedOffsetInput" min="-20" max="20" step="0.1" value="2.5">
+      <div class="hint">Offset aggiunto alla velocità del rullo quando è in movimento. Il valore predefinito è <b>+2,5 km/h</b>, coerente con la correzione di potenza. Vale anche per le registrazioni.</div>
+    </div>
+    <label class="check"><input type="checkbox" id="debugInput" checked> Mostra anche i dati grezzi dei servizi proprietari</label>
+    <div class="field">
+      <button class="btn" id="btnSaveSettings">Salva impostazioni</button>
+    </div>
+  </div>
+</div>
+
+<div class="sheet" id="workoutSheet" hidden>
+  <div class="sheet-backdrop" data-close></div>
+  <div class="sheet-panel workout-sheet">
+    <div class="sheet-head">
+      <div>
+        <h2 id="workoutSheetTitle">Nuovo allenamento</h2>
+        <p class="sheet-sub" id="workoutSheetSub">Costruisci una sequenza di intervalli con durata e watt target.</p>
+      </div>
+      <button class="btn ghost icon" data-close aria-label="Chiudi">&times;</button>
+    </div>
+    <div class="workout-form">
+      <div class="field">
+        <label for="workoutName">Nome</label>
+        <input type="text" id="workoutName" maxlength="80" placeholder="Es. VO2max 5x3">
+      </div>
+      <div class="field">
+        <label for="workoutDescription">Descrizione</label>
+        <input type="text" id="workoutDescription" maxlength="280" placeholder="Obiettivo, recuperi, note">
+      </div>
+      <div class="field">
+        <label for="workoutNotes">Note e istruzioni</label>
+        <textarea id="workoutNotes" maxlength="6000" placeholder="Cosa fare, cadenza, resistenza, cosa mangiare durante..."></textarea>
+        <div class="hint">Queste note compaiono nella dashboard quando selezioni l'allenamento.</div>
+      </div>
+      <div class="interval-editor-head">
+        <span class="label">Intervalli</span>
+        <span class="interval-editor-total" id="workoutTotal">-</span>
+      </div>
+      <div class="interval-head">
+        <span>#</span><span>Nome</span><span>Min</span><span></span><span>Sec</span><span>Watt</span><span></span>
+      </div>
+      <div class="interval-rows" id="intervalRows"></div>
+      <button class="btn small ghost workout-add" id="btnAddInterval" type="button">Aggiungi intervallo</button>
+      <canvas class="workout-preview" id="workoutPreview" aria-label="Anteprima del profilo target"></canvas>
+    </div>
+    <div class="sheet-actions">
+      <button class="btn ghost danger hidden" id="btnDeleteWorkout" type="button">Elimina</button>
+      <button class="btn ghost" id="btnCancelWorkout" data-close type="button">Annulla</button>
+      <button class="btn primary" id="btnSaveWorkout" type="button">Salva allenamento</button>
+    </div>
+  </div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script>
+(() => {
+  "use strict";
+
+  const $ = (id) => document.getElementById(id);
+  const root = document.documentElement;
+
+  function cssVar(name) {
+    return getComputedStyle(root).getPropertyValue(name).trim();
+  }
+
+  // Appende un canale alpha a un colore esadecimale (#rrggbb + aa).
+  function hexA(hex, alpha) {
+    const match = /^#?([0-9a-f]{6})$/i.exec(String(hex || ""));
+    if (!match) return String(hex || "");
+    const clamped = Math.max(0, Math.min(1, Number(alpha) || 0));
+    return `#${match[1]}${Math.round(clamped * 255).toString(16).padStart(2, "0")}`;
+  }
+
+  function readPalette() {
+    return {
+      power: cssVar("--power"),
+      speed: cssVar("--speed"),
+      cadence: cssVar("--cadence"),
+      grid: cssVar("--c-grid"),
+      axis: cssVar("--c-axis"),
+      text: cssVar("--c-axis"),
+      marker: cssVar("--c-marker"),
+    };
+  }
+
+  let COLORS = readPalette();
+
+  const ZONE_SETS = {
+    dark: [
+      { max: 0.55, name: "Z1 · recupero", color: "#7c8b8d" },
+      { max: 0.75, name: "Z2 · endurance", color: "#c8f04b" },
+      { max: 0.90, name: "Z3 · tempo", color: "#ffd166" },
+      { max: 1.05, name: "Z4 · soglia", color: "#ff8a3d" },
+      { max: 1.20, name: "Z5 · VO2", color: "#ff5a1f" },
+      { max: Infinity, name: "Z6 · anaerobico", color: "#ff4d4d" },
+    ],
+    light: [
+      { max: 0.55, name: "Z1 · recupero", color: "#6b7c78" },
+      { max: 0.75, name: "Z2 · endurance", color: "#7fae00" },
+      { max: 0.90, name: "Z3 · tempo", color: "#b7791f" },
+      { max: 1.05, name: "Z4 · soglia", color: "#d9730d" },
+      { max: 1.20, name: "Z5 · VO2", color: "#e0430b" },
+      { max: Infinity, name: "Z6 · anaerobico", color: "#d92d20" },
+    ],
+  };
+  const zones = () => ZONE_SETS[root.dataset.theme === "light" ? "light" : "dark"];
+
+  const app = {
+    ws: null,
+    snapshot: null,
+    history: [],
+    prev: { power: 0, speed: 0, cadence: 0 },
+    ftp: 179,
+    weight: 82,
+    sessionsLoaded: 0,
+    statsStamp: 0,
+    resistanceDragging: false,
+    workouts: [],
+    workoutsLoaded: false,
+    selectedWorkoutId: null,
+    editingWorkoutId: null,
+    libraryStamp: "",
+    timelineWorkoutId: null,
+    lastWorkoutIndex: null,
+  };
+
+  // ---------------------------------------------------------------- utils
+  function toast(message, isError = false) {
+    const el = $("toast");
+    el.textContent = message;
+    el.classList.toggle("err", isError);
+    el.classList.add("show");
+    clearTimeout(toast._t);
+    toast._t = setTimeout(() => el.classList.remove("show"), 3200);
+  }
+
+  function fmtDuration(seconds) {
+    const s = Math.max(0, Math.round(Number(seconds) || 0));
+    const h = Math.floor(s / 3600);
+    const m = Math.floor((s % 3600) / 60);
+    const r = s % 60;
+    return h > 0
+      ? `${h}:${String(m).padStart(2, "0")}:${String(r).padStart(2, "0")}`
+      : `${String(m).padStart(2, "0")}:${String(r).padStart(2, "0")}`;
+  }
+
+  function setText(id, value) {
+    const el = $(id);
+    if (el) el.textContent = value;
+  }
+
+  async function api(path, options) {
+    const res = await fetch(path, options);
+    let body = null;
+    try { body = await res.json(); } catch { /* no body */ }
+    if (!res.ok) {
+      const detail = body && body.detail ? body.detail : `errore ${res.status}`;
+      throw new Error(detail);
+    }
+    return body;
+  }
+
+  // ---------------------------------------------------------------- canvas
+  function setupCanvas(canvas) {
+    const dpr = window.devicePixelRatio || 1;
+    const rect = canvas.getBoundingClientRect();
+    if (rect.width === 0 || rect.height === 0) return null;
+    const w = Math.floor(rect.width * dpr);
+    const h = Math.floor(rect.height * dpr);
+    if (canvas.width !== w || canvas.height !== h) {
+      canvas.width = w;
+      canvas.height = h;
+    }
+    const ctx = canvas.getContext("2d");
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    return { ctx, w: rect.width, h: rect.height };
+  }
+
+  function linePath(ctx, points, x, y) {
+    ctx.beginPath();
+    points.forEach((p, i) => {
+      const px = x(i);
+      const py = y(p);
+      if (i === 0) ctx.moveTo(px, py);
+      else ctx.lineTo(px, py);
+    });
+  }
+
+  function drawChart() {
+    const canvas = $("chart");
+    const setup = setupCanvas(canvas);
+    if (!setup) return;
+    const { ctx, w, h } = setup;
+    ctx.clearRect(0, 0, w, h);
+
+    const workout = app.snapshot && app.snapshot.workout;
+    if (
+      workout &&
+      workout.active &&
+      Array.isArray(workout.intervals) &&
+      workout.intervals.length
+    ) {
+      $("chartEmpty").classList.remove("show");
+      drawWorkoutChart(ctx, w, h, workout);
+    } else {
+      drawLiveChart(ctx, w, h);
+    }
+  }
+
+  function drawLiveChart(ctx, w, h) {
+    const pad = { l: 38, r: 42, t: 12, b: 24 };
+    const innerW = w - pad.l - pad.r;
+    const innerH = h - pad.t - pad.b;
+
+    const history = app.history;
+    $("chartEmpty").classList.toggle("show", history.length < 2);
+    if (history.length < 2) return;
+
+    const maxPower = Math.max(250, ...history.map((p) => p.p)) * 1.12;
+    const maxSpeed = Math.max(45, ...history.map((p) => p.s)) * 1.12;
+    const span = Math.max(1, history[history.length - 1].t - history[0].t);
+    const windowS = span <= 60 ? 60 : span <= 120 ? 120 : 240;
+    const nowT = history[history.length - 1].t;
+    const xAt = (t) =>
+      pad.l + Math.max(0, Math.min(1, 1 - (nowT - t) / windowS)) * innerW;
+    setText(
+      "chartWindow",
+      windowS >= 120 ? `ultimi ${windowS / 60} minuti` : `ultimi ${windowS} secondi`
+    );
+    const yPower = (v) => pad.t + innerH - (v / maxPower) * innerH;
+    const ySpeed = (v) => pad.t + innerH - (v / maxSpeed) * innerH;
+
+    function pathFor(key, yFn) {
+      ctx.beginPath();
+      history.forEach((point, index) => {
+        const px = xAt(point.t);
+        const py = yFn(point[key]);
+        if (index === 0) ctx.moveTo(px, py);
+        else ctx.lineTo(px, py);
+      });
+    }
+
+    // grid
+    ctx.strokeStyle = COLORS.grid;
+    ctx.lineWidth = 1;
+    ctx.font = "10px ui-monospace, Menlo, monospace";
+    ctx.fillStyle = COLORS.text;
+    for (let i = 0; i <= 4; i++) {
+      const yy = pad.t + (innerH / 4) * i;
+      ctx.beginPath();
+      ctx.moveTo(pad.l, yy);
+      ctx.lineTo(pad.l + innerW, yy);
+      ctx.stroke();
+
+      const powerLabel = Math.round(maxPower - (maxPower / 4) * i);
+      const speedLabel = Math.round(maxSpeed - (maxSpeed / 4) * i);
+      ctx.textAlign = "right";
+      ctx.fillText(String(powerLabel), pad.l - 7, yy + 3);
+      ctx.textAlign = "left";
+      ctx.fillText(String(speedLabel), pad.l + innerW + 7, yy + 3);
+    }
+    ctx.textAlign = "center";
+    ctx.fillStyle = hexA(COLORS.axis, .65);
+    const labelFor = (seconds) => {
+      if (seconds === 0) return "ora";
+      return windowS === 240
+        ? `-${Math.round(seconds / 60)}m`
+        : `-${Math.round(seconds)}s`;
+    };
+    [0, 1, 2, 3, 4].forEach((i) => {
+      const seconds = windowS - (windowS / 4) * i;
+      ctx.fillText(labelFor(seconds), pad.l + (innerW / 4) * i, h - 7);
+    });
+
+    // power area
+    const gradient = ctx.createLinearGradient(0, pad.t, 0, pad.t + innerH);
+    gradient.addColorStop(0, hexA(COLORS.power, .28));
+    gradient.addColorStop(1, hexA(COLORS.power, 0));
+    pathFor("p", yPower);
+    ctx.lineTo(xAt(nowT), pad.t + innerH);
+    ctx.lineTo(xAt(history[0].t), pad.t + innerH);
+    ctx.closePath();
+    ctx.fillStyle = gradient;
+    ctx.fill();
+
+    pathFor("p", yPower);
+    ctx.strokeStyle = COLORS.power;
+    ctx.lineWidth = 2;
+    ctx.lineJoin = "round";
+    ctx.stroke();
+
+    // speed line
+    pathFor("s", ySpeed);
+    ctx.strokeStyle = COLORS.speed;
+    ctx.lineWidth = 1.6;
+    ctx.stroke();
+
+    // current dots
+    const last = history[history.length - 1];
+    ctx.fillStyle = COLORS.power;
+    ctx.beginPath();
+    ctx.arc(xAt(last.t), yPower(last.p), 3.2, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.fillStyle = COLORS.speed;
+    ctx.beginPath();
+    ctx.arc(xAt(last.t), ySpeed(last.s), 2.8, 0, Math.PI * 2);
+    ctx.fill();
+  }
+
+  function fmtChartTime(seconds) {
+    const total = Math.max(0, Math.round(Number(seconds) || 0));
+    const h = Math.floor(total / 3600);
+    const m = Math.floor((total % 3600) / 60);
+    const s = total % 60;
+    return h > 0
+      ? `${h}:${String(m).padStart(2, "0")}`
+      : `${m}:${String(s).padStart(2, "0")}`;
+  }
+
+  function workoutTimeStep(total) {
+    if (total <= 600) return 60;
+    if (total <= 1200) return 120;
+    if (total <= 2400) return 300;
+    if (total <= 4800) return 600;
+    if (total <= 7200) return 900;
+    return 1200;
+  }
+
+  function drawWorkoutChart(ctx, w, h, workout) {
+    const pad = { l: 46, r: 26, t: 20, b: 28 };
+    const innerW = w - pad.l - pad.r;
+    const innerH = h - pad.t - pad.b;
+    const intervals = workout.intervals || [];
+    const total = Math.max(
+      1,
+      Number(workout.total_s) || intervals.reduce((sum, iv) => sum + Number(iv.duration_s || 0), 0)
+    );
+    const current = workout.current || null;
+    const currentPower = Number(
+      (app.snapshot && app.snapshot.metrics && app.snapshot.metrics.power_w) || 0
+    );
+    const elapsed = Math.max(0, Math.min(total, Number(workout.elapsed_s) || 0));
+    const actual = app.history
+      .filter((point) => Number.isFinite(Number(point.wt)))
+      .map((point) => ({ ...point, wt: Number(point.wt) }))
+      .filter((point) => point.wt >= 0 && point.wt <= total)
+      .sort((a, b) => a.wt - b.wt);
+    const maxTarget = Math.max(100, ...intervals.map((iv) => Number(iv.power_w) || 0));
+    const maxActual = Math.max(0, ...actual.map((point) => Number(point.p) || 0));
+    const scaleMax = Math.max(200, maxTarget * 1.12, maxActual * 1.12);
+    const xAt = (seconds) =>
+      pad.l + Math.max(0, Math.min(1, seconds / total)) * innerW;
+    const yAt = (value) =>
+      pad.t + innerH - Math.max(0, Math.min(1, value / scaleMax)) * innerH;
+
+    // grid and time labels
+    ctx.lineWidth = 1;
+    ctx.font = "10px ui-monospace, Menlo, monospace";
+    for (let i = 0; i <= 4; i++) {
+      const yy = pad.t + (innerH / 4) * i;
+      ctx.strokeStyle = COLORS.grid;
+      ctx.beginPath();
+      ctx.moveTo(pad.l, yy);
+      ctx.lineTo(pad.l + innerW, yy);
+      ctx.stroke();
+      ctx.fillStyle = COLORS.text;
+      ctx.textAlign = "right";
+      ctx.fillText(
+        String(Math.round(scaleMax - (scaleMax / 4) * i)),
+        pad.l - 7,
+        yy + 3
+      );
+    }
+
+    const step = workoutTimeStep(total);
+    const ticks = [];
+    for (let seconds = 0; seconds < total; seconds += step) ticks.push(seconds);
+    ticks.push(total);
+    ctx.textAlign = "center";
+    ctx.fillStyle = hexA(COLORS.axis, .65);
+    ticks.forEach((seconds) => {
+      const x = xAt(seconds);
+      ctx.strokeStyle = hexA(COLORS.grid, .9);
+      ctx.beginPath();
+      ctx.moveTo(x, pad.t);
+      ctx.lineTo(x, pad.t + innerH);
+      ctx.stroke();
+      ctx.fillText(fmtChartTime(seconds), x, h - 7);
+    });
+
+    // highlight the current interval
+    if (current && workout.status !== "completed") {
+      const left = xAt(Number(current.start_s) || 0);
+      const right = xAt(Number(current.end_s) || 0);
+      ctx.fillStyle = hexA(COLORS.cadence, .08);
+      ctx.fillRect(left, pad.t, Math.max(0, right - left), innerH);
+      ctx.fillStyle = hexA(COLORS.cadence, .85);
+      ctx.fillRect(left, pad.t - 1, Math.max(2, right - left), 2);
+    }
+
+    // target profile: filled steps, then a crisp top line
+    const targetGradient = ctx.createLinearGradient(0, pad.t, 0, pad.t + innerH);
+    targetGradient.addColorStop(0, hexA(COLORS.cadence, .17));
+    targetGradient.addColorStop(1, hexA(COLORS.cadence, .02));
+    ctx.beginPath();
+    ctx.moveTo(xAt(0), yAt(0));
+    intervals.forEach((iv) => {
+      ctx.lineTo(xAt(Number(iv.start_s) || 0), yAt(Number(iv.power_w) || 0));
+      ctx.lineTo(xAt(Number(iv.end_s) || 0), yAt(Number(iv.power_w) || 0));
+    });
+    ctx.lineTo(xAt(total), yAt(0));
+    ctx.closePath();
+    ctx.fillStyle = targetGradient;
+    ctx.fill();
+
+    ctx.beginPath();
+    intervals.forEach((iv, index) => {
+      const left = xAt(Number(iv.start_s) || 0);
+      const right = xAt(Number(iv.end_s) || 0);
+      const power = yAt(Number(iv.power_w) || 0);
+      if (index === 0) ctx.moveTo(left, power);
+      else ctx.lineTo(left, power);
+      ctx.lineTo(right, power);
+    });
+    ctx.strokeStyle = hexA(COLORS.cadence, .75);
+    ctx.lineWidth = 1.5;
+    ctx.lineJoin = "round";
+    ctx.stroke();
+
+    // target watt labels where the segment has room
+    ctx.font = "9.5px ui-monospace, Menlo, monospace";
+    ctx.textAlign = "center";
+    intervals.forEach((iv) => {
+      const left = xAt(Number(iv.start_s) || 0);
+      const right = xAt(Number(iv.end_s) || 0);
+      if (right - left < 34) return;
+      ctx.fillStyle = hexA(
+        COLORS.cadence,
+        current && current.index === iv.index ? .95 : .55
+      );
+      ctx.fillText(
+        `${Math.round(Number(iv.power_w) || 0)}`,
+        (left + right) / 2,
+        Math.max(pad.t + 12, yAt(Number(iv.power_w) || 0) - 6)
+      );
+    });
+
+    // actual power, mapped by workout elapsed time
+    if (actual.length > 1) {
+      ctx.beginPath();
+      actual.forEach((point, index) => {
+        const x = xAt(point.wt);
+        const y = yAt(Number(point.p) || 0);
+        if (index === 0) ctx.moveTo(x, y);
+        else ctx.lineTo(x, y);
+      });
+      ctx.strokeStyle = COLORS.power;
+      ctx.lineWidth = 2.2;
+      ctx.lineJoin = "round";
+      ctx.stroke();
+    }
+
+    // current position marker and live power dot
+    const nowX = xAt(elapsed);
+    ctx.setLineDash([4, 5]);
+    ctx.strokeStyle = hexA(COLORS.marker, .4);
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    ctx.moveTo(nowX, pad.t);
+    ctx.lineTo(nowX, pad.t + innerH);
+    ctx.stroke();
+    ctx.setLineDash([]);
+    ctx.fillStyle = hexA(COLORS.marker, .8);
+    ctx.beginPath();
+    ctx.moveTo(nowX, pad.t + 4);
+    ctx.lineTo(nowX - 4, pad.t - 2);
+    ctx.lineTo(nowX + 4, pad.t - 2);
+    ctx.closePath();
+    ctx.fill();
+
+    if (currentPower > 0 || workout.status === "running" || workout.status === "paused") {
+      ctx.fillStyle = COLORS.power;
+      ctx.beginPath();
+      ctx.arc(nowX, yAt(currentPower), 3.6, 0, Math.PI * 2);
+      ctx.fill();
+    }
+  }
+
+  function drawSpark(canvasId, values, color) {
+    const canvas = $(canvasId);
+    if (!canvas) return;
+    const setup = setupCanvas(canvas);
+    if (!setup) return;
+    const { ctx, w, h } = setup;
+    ctx.clearRect(0, 0, w, h);
+    if (values.length < 2) return;
+
+    const max = Math.max(1, ...values) * 1.15;
+    const x = (i) => (i / (values.length - 1)) * w;
+    const y = (v) => h - 2 - (v / max) * (h - 4);
+
+    const gradient = ctx.createLinearGradient(0, 0, 0, h);
+    gradient.addColorStop(0, color + "44");
+    gradient.addColorStop(1, color + "00");
+    linePath(ctx, values, x, y);
+    ctx.lineTo(w, h);
+    ctx.lineTo(0, h);
+    ctx.closePath();
+    ctx.fillStyle = gradient;
+    ctx.fill();
+
+    linePath(ctx, values, x, y);
+    ctx.strokeStyle = color;
+    ctx.lineWidth = 1.5;
+    ctx.stroke();
+  }
+
+  // ---------------------------------------------------------------- render
+  function setStatus(state) {
+    const pill = $("statusPill");
+    pill.className = "status";
+    const map = {
+      idle: ["offline", ""],
+      scanning: ["ricerca", "busy"],
+      connecting: ["connessione", "busy"],
+      reconnecting: ["riconnessione", "busy"],
+      connected: ["live", "live"],
+      simulating: ["demo", "live"],
+      error: ["errore", "err"],
+    };
+    const [label, cls] = map[state.status] || [state.status, ""];
+    if (cls) pill.classList.add(cls);
+    setText("statusText", label);
+
+    const simulating = state.mode === "simulate" || state.status === "simulating";
+    $("btnScan").classList.toggle("hidden", simulating);
+    $("btnDisconnect").classList.toggle("hidden", simulating || state.status === "idle");
+  }
+
+  function renderControl(state) {
+    const control = state.control || {};
+    const connected = state.status === "connected" || state.status === "simulating";
+    const resistance = control.range || null;
+    const powerRange = control.power_range || null;
+    const canResistance = Boolean(connected && control.supported && resistance);
+    const canErg = Boolean(
+      connected
+      && control.supported
+      && powerRange
+      && control.erg_supported !== false
+      && !control.simulation
+    );
+    const canSimulation = Boolean(
+      connected && control.supported && control.simulation_supported
+    );
+    const simulation = Boolean(control.simulation);
+    const mode = control.mode || "off";
+
+    const slider = $("resistanceSlider");
+    const ergInput = $("ergInput");
+    const ergValue = $("ergValue");
+    const modeEl = $("controlMode");
+    const statusEl = $("controlStatus");
+
+    if (resistance) {
+      slider.min = resistance.min;
+      slider.max = resistance.max;
+      slider.step = resistance.step || 0.1;
+    }
+    if (powerRange) {
+      ergInput.min = powerRange.min;
+      ergInput.max = powerRange.max;
+      ergInput.step = powerRange.step || 1;
+    }
+
+    // Do not fight the user while dragging the slider.
+    if (!app.resistanceDragging) {
+      const numeric = control.resistance != null
+        ? Number(control.resistance)
+        : Number(slider.min || 0);
+      slider.value = numeric;
+      updateResistanceDisplay(numeric, control.resistance != null);
+    }
+
+    slider.disabled = !canResistance || simulation;
+    document.querySelectorAll("[data-resistance]").forEach((el) => {
+      el.disabled = !canResistance || simulation;
+    });
+    ergInput.disabled = !canErg;
+    $("btnErg").disabled = !canErg;
+    $("btnRoad").disabled = !canSimulation;
+
+    const actualEl = $("actualResistance");
+    const actual = control.actual_resistance;
+    if (connected && actual != null) {
+      actualEl.innerHTML = `attuale <b>${Number(actual).toFixed(1)}</b>`;
+      const target = control.resistance != null ? Number(control.resistance) : null;
+      actualEl.classList.toggle(
+        "moving",
+        target != null && Math.abs(Number(actual) - target) > 0.2
+      );
+    } else {
+      actualEl.textContent = "attuale -";
+      actualEl.classList.remove("moving");
+    }
+
+    if (mode === "erg" && control.target_power != null) {
+      ergValue.innerHTML = `${Math.round(control.target_power)} <small>W</small>`;
+      ergValue.classList.remove("idle");
+      if (document.activeElement !== ergInput) ergInput.value = control.target_power;
+    } else {
+      ergValue.textContent = canErg ? "off" : "n/d";
+      ergValue.classList.add("idle");
+    }
+
+    modeEl.className = "control-mode";
+    if (mode === "simulation") {
+      modeEl.textContent = "strada";
+      modeEl.classList.add("road");
+    } else if (mode === "erg") {
+      modeEl.textContent = "ERG";
+      modeEl.classList.add("erg");
+    } else if (mode === "resistance") {
+      modeEl.textContent = "resistenza";
+      modeEl.classList.add("active");
+    } else {
+      modeEl.textContent = "off";
+    }
+
+    const roadValue = $("roadValue");
+    if (simulation) {
+      roadValue.textContent = "piatta";
+      roadValue.classList.remove("idle");
+    } else {
+      roadValue.textContent = canSimulation ? "off" : "n/d";
+      roadValue.classList.add("idle");
+    }
+    $("btnRoad").textContent = simulation ? "Disattiva strada" : "Attiva strada";
+    if (!canSimulation) {
+      $("roadHint").innerHTML = "Questo rullo non espone la simulazione strada FTMS. Resta disponibile la resistenza manuale.";
+    } else if (simulation) {
+      $("roadHint").innerHTML = "Strada piatta attiva: il rullo adatta la resistenza alla velocità. Per tornare al controllo manuale, disattiva la modalità.";
+    } else {
+      $("roadHint").innerHTML = "Strada piatta: il rullo adatta da solo la resistenza alla velocità (Crr 0,005, CdA 0,35). Questa modalità invia comandi FTMS al rullo.";
+    }
+
+    if (!connected) {
+      statusEl.textContent = "rullo non connesso";
+    } else if (state.mode === "simulate" || state.status === "simulating") {
+      statusEl.textContent = "demo · comandi simulati, nessun hardware";
+    } else if (!control.supported) {
+      statusEl.textContent = "il rullo non espone un control point FTMS";
+    } else if (mode === "simulation") {
+      statusEl.textContent = "strada simulata · resistenza automatica";
+    } else if (mode === "erg") {
+      statusEl.textContent = `ERG attivo · target ${Math.round(control.target_power)} W`;
+    } else {
+      statusEl.textContent = "resistenza controllata via FTMS · 0-20";
+    }
+
+    if (!connected) {
+      $("controlHint").innerHTML = "Connetti il rullo per comandare resistenza e target power.";
+    } else if (!control.supported) {
+      $("controlHint").innerHTML = "Questo firmware non espone un control point utilizzabile. La resistenza resta manuale.";
+    } else if (!canResistance) {
+      $("controlHint").innerHTML = "Il target power (ERG) è disponibile. Questo rullo non espone il controllo diretto della resistenza.";
+    } else if (simulation) {
+      $("controlHint").innerHTML = "Strada simulata attiva: lo slider e l'ERG sono disabilitati. Il rullo regola la resistenza in base alla velocità; disattiva la modalità per tornare al controllo manuale.";
+    } else if (!canErg) {
+      $("controlHint").innerHTML = "Resistenza disponibile. Il target power (ERG) non è supportato da questo rullo.";
+    } else {
+      $("controlHint").innerHTML = "Muovi lo slider per cambiare durezza. L'app invia anche <b>Start/Resume</b>: senza avvio il rullo accetta il target ma il freno resta fermo. In <b>ERG</b> il rullo adatta la resistenza per mantenere i watt scelti; muovi lo slider per uscire. La riga «attuale» è la posizione del freno riportata dal rullo: si muove gradualmente, quindi può restare diversa dal target per qualche secondo.";
+    }
+
+    // Keep the ERG button label meaningful when a target is active.
+    $("btnErg").textContent = mode === "erg" ? "Aggiorna ERG" : "Attiva ERG";
+  }
+
+  function updateResistanceDisplay(value, hasValue = true) {
+    const slider = $("resistanceSlider");
+    const min = Number(slider.min) || 0;
+    const max = Number(slider.max) || 20;
+    const numeric = Number(value) || 0;
+    const pct = max > min ? ((numeric - min) / (max - min)) * 100 : 0;
+    slider.style.setProperty("--fill", `${Math.max(0, Math.min(100, pct))}%`);
+
+    const el = $("resistanceValue");
+    if (hasValue) {
+      el.innerHTML = `${numeric.toFixed(1)} <small>/ ${max.toFixed(0)}</small>`;
+    } else {
+      el.textContent = "-";
+    }
+    el.classList.toggle("idle", !hasValue);
+  }
+
+  // ---------------------------------------------------------------- workouts
+  function workoutById(id) {
+    return app.workouts.find((workout) => workout.id === id) || null;
+  }
+
+  function intervalCountLabel(count) {
+    const number = Math.max(0, Math.round(Number(count) || 0));
+    return `${number} ${number === 1 ? "intervallo" : "intervalli"}`;
+  }
+
+  function workoutTotal(workout) {
+    if (!workout) return 0;
+    if (Number.isFinite(Number(workout.total_s))) return Number(workout.total_s);
+    return (workout.intervals || []).reduce(
+      (sum, interval) => sum + (Number(interval.duration_s) || 0),
+      0
+    );
+  }
+
+  function workoutAvg(workout) {
+    if (!workout) return 0;
+    if (Number.isFinite(Number(workout.avg_power_w))) {
+      return Math.round(Number(workout.avg_power_w));
+    }
+    const total = workoutTotal(workout);
+    if (!total) return 0;
+    const weighted = (workout.intervals || []).reduce(
+      (sum, interval) =>
+        sum + (Number(interval.power_w) || 0) * (Number(interval.duration_s) || 0),
+      0
+    );
+    return Math.round(weighted / total);
+  }
+
+  function renderChartHeader(workout) {
+    const active = Boolean(workout && workout.active);
+    const title = $("chartTitle");
+    if (active) {
+      title.textContent =
+        workout.status === "completed" ? "Allenamento completato" : "Profilo allenamento";
+      const index = workout.current ? Number(workout.current.index) + 1 : 0;
+      $("chartWindow").textContent = `${workout.name} · ${fmtDuration(workout.total_s)} · intervallo ${index}/${workout.intervals.length}`;
+      $("chartLegend").innerHTML =
+        '<span class="lg target">target</span><span class="lg power">potenza</span>';
+    } else {
+      title.textContent = "Andamento";
+      $("chartWindow").textContent = "finestra mobile";
+      $("chartLegend").innerHTML =
+        '<span class="lg power">potenza</span><span class="lg speed">velocità</span>';
+    }
+  }
+
+  function renderTargetCard(workout) {
+    const card = $("targetCard");
+    const active = Boolean(workout && workout.active);
+    const completed = active && workout.status === "completed";
+    const paused = active && workout.status === "paused";
+    card.classList.toggle("idle", !active);
+    card.classList.toggle("paused", paused);
+    card.classList.toggle("completed", completed);
+
+    const status = $("targetStatus");
+    const power = $("targetPower");
+    const bar = $("targetBar");
+
+    if (!active) {
+      status.textContent = "pronto";
+      const selected = workoutById(app.selectedWorkoutId);
+      const first = selected && (selected.intervals || [])[0];
+      power.textContent = first ? String(Math.round(Number(first.power_w) || 0)) : "--";
+      if (selected) {
+        const count = selected.interval_count || (selected.intervals || []).length;
+        setText("targetInterval", `Pronto: ${selected.name}`);
+        setText("targetPct", "primo intervallo");
+        setText(
+          "targetRemaining",
+          first
+            ? `${fmtDuration(first.duration_s)} @ ${Math.round(Number(first.power_w) || 0)} W`
+            : "Avvia dal pannello"
+        );
+        setText(
+          "targetElapsed",
+          `${fmtDuration(workoutTotal(selected))} · ${intervalCountLabel(count)}`
+        );
+        $("targetNext").innerHTML = `Media <b>${workoutAvg(selected)} W</b>, massimo <b>${selected.max_power_w || 0} W</b>`;
+      } else {
+        setText("targetInterval", "Nessun allenamento attivo");
+        setText("targetPct", "");
+        setText("targetRemaining", "Crea o scegli un workout");
+        setText("targetElapsed", "");
+        $("targetNext").textContent =
+          "Il target è una guida: pedala per restare vicino alla linea.";
+      }
+      bar.style.width = "0%";
+      return;
+    }
+
+    const current = workout.current || {};
+    const target = workout.target_power;
+    status.textContent = paused ? "in pausa" : completed ? "completato" : "in corso";
+    power.textContent = target == null ? "-" : String(Math.round(Number(target)));
+    const index = Number(current.index || 0) + 1;
+    setText(
+      "targetInterval",
+      `Intervallo ${index}/${workout.intervals.length} · ${current.label || "Intervallo"}`
+    );
+    setText(
+      "targetPct",
+      target != null && workout.target_pct_ftp != null
+        ? `${Math.round(Number(workout.target_pct_ftp) * 100)}% FTP`
+        : ""
+    );
+    setText(
+      "targetRemaining",
+      completed
+        ? "Allenamento completato"
+        : `restano ${fmtDuration(Number(current.remaining_s) || 0)}`
+    );
+    setText(
+      "targetElapsed",
+      `${fmtDuration(workout.elapsed_s)} / ${fmtDuration(workout.total_s)}`
+    );
+    const duration = Number(current.duration_s) || 0;
+    const currentProgress = completed
+      ? 1
+      : duration > 0
+        ? Math.min(1, (Number(current.elapsed_s) || 0) / duration)
+        : 0;
+    bar.style.width = `${(currentProgress * 100).toFixed(1)}%`;
+
+    const next = workout.next;
+    if (completed) {
+      $("targetNext").innerHTML = `Hai completato <b>${escapeHtml(workout.name)}</b>. La sessione resta aperta: puoi salvarla con <b>Nuova</b>.`;
+    } else if (next) {
+      $("targetNext").innerHTML = `Prossimo: <b>${escapeHtml(next.label)}</b>, ${fmtDuration(next.duration_s)}, <b>${Math.round(Number(next.power_w) || 0)} W</b>`;
+    } else {
+      $("targetNext").innerHTML = `Ultimo intervallo: <b>${Math.round(Number(current.power_w) || 0)} W</b>`;
+    }
+  }
+
+  function renderWorkoutLibrary(workout) {
+    const active = Boolean(workout && workout.active);
+    $("workoutIdle").classList.toggle("hidden", active);
+    $("workoutActive").classList.toggle("hidden", !active);
+    if (active) return;
+
+    if (!app.workoutsLoaded) {
+      $("workoutList").innerHTML =
+        '<div class="no-sessions">Caricamento allenamenti…</div>';
+      $("btnStartWorkout").disabled = true;
+      $("btnEditWorkout").disabled = true;
+      return;
+    }
+
+    const stamp = app.workouts
+      .map((item) => `${item.id}:${item.updated_at || ""}`)
+      .join("|") + "|" + (app.selectedWorkoutId || "");
+    if (stamp === app.libraryStamp) return;
+    app.libraryStamp = stamp;
+
+    const list = $("workoutList");
+    if (!app.workouts.length) {
+      list.innerHTML =
+        '<div class="no-sessions">Nessun allenamento. Creane uno con <b>Nuovo</b>.</div>';
+      $("btnStartWorkout").disabled = true;
+      $("btnEditWorkout").disabled = true;
+      return;
+    }
+
+    list.innerHTML = app.workouts.map((item) => {
+      const selected = item.id === app.selectedWorkoutId;
+      const maxPower = Math.max(
+        1,
+        ...(item.intervals || []).map((interval) => Number(interval.power_w) || 0)
+      );
+      const segments = (item.intervals || []).map((interval) => {
+        const height = Math.max(
+          4,
+          Math.round(((Number(interval.power_w) || 0) / maxPower) * 100)
+        );
+        const hot = (Number(interval.power_w) || 0) >= maxPower * 0.85;
+        return `<span class="${hot ? "hot" : ""}" style="flex-grow:${Math.max(1, Number(interval.duration_s) || 1)};height:${height}%"></span>`;
+      }).join("");
+      return `<button type="button" class="workout-row${selected ? " selected" : ""}" data-workout-id="${escapeHtml(item.id)}">
+        <span class="workout-row-top"><span class="workout-row-name">${escapeHtml(item.name)}</span><span class="workout-row-time">${fmtDuration(workoutTotal(item))}</span></span>
+        <span class="workout-spark">${segments}</span>
+        <span class="workout-row-meta"><span>${intervalCountLabel(item.interval_count || (item.intervals || []).length)}</span><span>media ${workoutAvg(item)} W</span>${item.builtin ? '<span class="base">base</span>' : ""}</span>
+      </button>`;
+    }).join("");
+
+    list.querySelectorAll("[data-workout-id]").forEach((row) => {
+      row.addEventListener("click", () => {
+        app.selectedWorkoutId = row.dataset.workoutId;
+        app.libraryStamp = "";
+        renderWorkoutLibrary(app.snapshot && app.snapshot.workout);
+        renderTargetCard(app.snapshot && app.snapshot.workout);
+      });
+    });
+
+    const selected = workoutById(app.selectedWorkoutId);
+    const guide = $("workoutGuideBody");
+    const guideSummary = $("workoutGuide").querySelector("summary");
+    if (selected) {
+      guide.textContent = selected.notes || "Nessuna nota per questo allenamento.";
+      guideSummary.textContent = `Note · ${selected.name}`;
+    } else {
+      guide.textContent = "Seleziona un allenamento per vedere cosa fare, cadenza, resistenza e nutrizione.";
+      guideSummary.textContent = "Note e istruzioni";
+    }
+    $("btnStartWorkout").disabled = !selected;
+    $("btnEditWorkout").disabled = !selected;
+  }
+
+  function renderWorkoutActive(workout) {
+    const active = Boolean(workout && workout.active);
+    $("workoutIdle").classList.toggle("hidden", active);
+    $("workoutActive").classList.toggle("hidden", !active);
+    if (!active) return;
+
+    const current = workout.current || {};
+    const index = Number(current.index || 0);
+    setText("workoutActiveName", workout.name || "Allenamento");
+    $("workoutActiveMeta").innerHTML =
+      `${fmtDuration(workout.elapsed_s)} / ${fmtDuration(workout.total_s)}<br>intervallo ${index + 1} / ${workout.intervals.length}`;
+    $("workoutOverallBar").style.width =
+      `${Math.min(100, Math.max(0, (Number(workout.progress) || 0) * 100))}%`;
+    setText(
+      "workoutState",
+      workout.status === "paused"
+        ? "in pausa"
+        : workout.status === "completed"
+          ? "completato"
+          : "in corso"
+    );
+    const chip = $("workoutChip");
+    chip.textContent =
+      workout.status === "completed"
+        ? "completato"
+        : workout.status === "paused"
+          ? "pausa"
+          : "live";
+    chip.className =
+      "workout-chip" +
+      (workout.status === "running"
+        ? " live"
+        : workout.status === "paused"
+          ? " paused"
+          : "");
+    const pause = $("btnPauseWorkout");
+    pause.textContent =
+      workout.status === "paused"
+        ? "Riprendi"
+        : workout.status === "completed"
+          ? "Completato"
+          : "Pausa";
+    pause.disabled = workout.status === "completed";
+    $("btnStopWorkout").textContent =
+      workout.status === "completed" ? "Chiudi" : "Termina";
+
+    const timelineKey = `${workout.id}:${workout.intervals.length}:${workout.total_s}`;
+    if (app.timelineWorkoutId !== timelineKey) {
+      app.timelineWorkoutId = timelineKey;
+      app.lastWorkoutIndex = null;
+      $("workoutTimeline").innerHTML = workout.intervals.map((interval, rowIndex) => `
+        <div class="timeline-row" data-index="${rowIndex}">
+          <span class="timeline-index">${String(rowIndex + 1).padStart(2, "0")}</span>
+          <span class="timeline-label">${escapeHtml(interval.label)}</span>
+          <span class="timeline-duration">${fmtDuration(interval.duration_s)}</span>
+          <span class="timeline-power">${Math.round(Number(interval.power_w) || 0)} W</span>
+        </div>`).join("");
+    }
+
+    $("workoutTimeline").querySelectorAll(".timeline-row").forEach((row) => {
+      const rowIndex = Number(row.dataset.index);
+      const done = rowIndex < index || (workout.status === "completed" && rowIndex === index);
+      row.classList.toggle("done", done);
+      row.classList.toggle(
+        "current",
+        rowIndex === index && workout.status !== "completed"
+      );
+    });
+
+    if (app.lastWorkoutIndex !== index) {
+      app.lastWorkoutIndex = index;
+      const timeline = $("workoutTimeline");
+      const row = timeline.querySelector(`.timeline-row[data-index="${index}"]`);
+      if (row) {
+        const rowTop =
+          row.getBoundingClientRect().top -
+          timeline.getBoundingClientRect().top +
+          timeline.scrollTop;
+        timeline.scrollTop = Math.max(
+          0,
+          rowTop - timeline.clientHeight / 2 + row.offsetHeight / 2
+        );
+      }
+    }
+  }
+
+  function renderWorkoutState(state) {
+    const workout = (state && state.workout) || { active: false };
+    renderChartHeader(workout);
+    renderTargetCard(workout);
+    renderWorkoutActive(workout);
+    renderWorkoutLibrary(workout);
+  }
+
+  async function loadWorkouts() {
+    try {
+      const data = await api("/api/workouts");
+      app.workouts = Array.isArray(data.workouts) ? data.workouts : [];
+      app.workoutsLoaded = true;
+      if (!workoutById(app.selectedWorkoutId)) {
+        app.selectedWorkoutId = app.workouts.length ? app.workouts[0].id : null;
+      }
+      app.libraryStamp = "";
+      renderWorkoutLibrary(app.snapshot && app.snapshot.workout);
+      renderTargetCard(app.snapshot && app.snapshot.workout);
+    } catch (err) {
+      app.workoutsLoaded = true;
+      $("workoutList").innerHTML = `<div class="no-sessions">${escapeHtml(err.message)}</div>`;
+      toast(err.message, true);
+    }
+  }
+
+  // ---------------------------------------------------------------- workout editor
+  function workoutEditorData() {
+    const rows = [...$("intervalRows").querySelectorAll(".interval-row")];
+    return rows.map((row, index) => {
+      const minutes = Number(row.querySelector(".interval-min").value) || 0;
+      const seconds = Number(row.querySelector(".interval-sec").value) || 0;
+      const power = Number(row.querySelector(".interval-power").value) || 0;
+      const label = row.querySelector(".interval-label").value.trim();
+      return {
+        label: label || `Intervallo ${index + 1}`,
+        duration_s: Math.round(minutes * 60 + seconds),
+        power_w: Math.round(power),
+      };
+    });
+  }
+
+  function drawWorkoutPreview(intervals) {
+    const canvas = $("workoutPreview");
+    const setup = setupCanvas(canvas);
+    if (!setup) return;
+    const { ctx, w, h } = setup;
+    ctx.clearRect(0, 0, w, h);
+
+    const pad = { l: 10, r: 10, t: 10, b: 14 };
+    const innerW = w - pad.l - pad.r;
+    const innerH = h - pad.t - pad.b;
+    const total = intervals.reduce(
+      (sum, interval) => sum + Math.max(0, interval.duration_s),
+      0
+    );
+
+    ctx.font = "9px ui-monospace, Menlo, monospace";
+    ctx.textAlign = "center";
+    ctx.fillStyle = hexA(COLORS.axis, .8);
+    if (!intervals.length || total <= 0) {
+      ctx.fillText("Aggiungi almeno un intervallo", w / 2, h / 2 + 3);
+      return;
+    }
+
+    const maxPower = Math.max(1, ...intervals.map((interval) => interval.power_w));
+    const scaleMax = maxPower * 1.18;
+    const xAt = (seconds) => pad.l + (seconds / total) * innerW;
+    const yAt = (value) =>
+      pad.t + innerH - Math.max(0, Math.min(1, value / scaleMax)) * innerH;
+    let cursor = 0;
+
+    for (let i = 0; i <= 3; i++) {
+      const y = pad.t + (innerH / 3) * i;
+      ctx.strokeStyle = hexA(COLORS.grid, 1);
+      ctx.beginPath();
+      ctx.moveTo(pad.l, y);
+      ctx.lineTo(pad.l + innerW, y);
+      ctx.stroke();
+    }
+
+    ctx.beginPath();
+    ctx.moveTo(xAt(0), yAt(0));
+    intervals.forEach((interval) => {
+      const start = cursor;
+      const end = cursor + Math.max(0, interval.duration_s);
+      ctx.lineTo(xAt(start), yAt(interval.power_w));
+      ctx.lineTo(xAt(end), yAt(interval.power_w));
+      cursor = end;
+    });
+    ctx.lineTo(xAt(total), yAt(0));
+    ctx.closePath();
+    const gradient = ctx.createLinearGradient(0, pad.t, 0, pad.t + innerH);
+    gradient.addColorStop(0, hexA(COLORS.cadence, .17));
+    gradient.addColorStop(1, hexA(COLORS.cadence, .02));
+    ctx.fillStyle = gradient;
+    ctx.fill();
+
+    cursor = 0;
+    ctx.beginPath();
+    intervals.forEach((interval, index) => {
+      const start = cursor;
+      const end = cursor + Math.max(0, interval.duration_s);
+      if (index === 0) ctx.moveTo(xAt(start), yAt(interval.power_w));
+      else ctx.lineTo(xAt(start), yAt(interval.power_w));
+      ctx.lineTo(xAt(end), yAt(interval.power_w));
+      cursor = end;
+    });
+    ctx.strokeStyle = hexA(COLORS.cadence, .8);
+    ctx.lineWidth = 1.5;
+    ctx.lineJoin = "round";
+    ctx.stroke();
+
+    cursor = 0;
+    intervals.forEach((interval) => {
+      cursor += Math.max(0, interval.duration_s);
+      if (cursor >= total) return;
+      ctx.strokeStyle = hexA(COLORS.grid, 1);
+      ctx.beginPath();
+      ctx.moveTo(xAt(cursor), pad.t);
+      ctx.lineTo(xAt(cursor), pad.t + innerH);
+      ctx.stroke();
+    });
+
+    ctx.fillStyle = hexA(COLORS.axis, .8);
+    ctx.textAlign = "left";
+    ctx.fillText("0:00", pad.l, h - 3);
+    ctx.textAlign = "right";
+    ctx.fillText(fmtDuration(total), w - pad.r, h - 3);
+  }
+
+  function updateWorkoutEditorSummary() {
+    const intervals = workoutEditorData();
+    const total = intervals.reduce((sum, interval) => sum + interval.duration_s, 0);
+    const weighted = intervals.reduce(
+      (sum, interval) => sum + interval.power_w * interval.duration_s,
+      0
+    );
+    const avg = total > 0 ? Math.round(weighted / total) : 0;
+    setText(
+      "workoutTotal",
+      `${fmtDuration(total)} · media ${avg} W · ${intervalCountLabel(intervals.length)}`
+    );
+
+    drawWorkoutPreview(intervals);
+  }
+
+  function addIntervalRow(interval = {}) {
+    const rows = $("intervalRows");
+    const index = rows.querySelectorAll(".interval-row").length;
+    const duration = Math.max(0, Number(interval.duration_s) || 600);
+    const minutes = Math.floor(duration / 60);
+    const seconds = duration % 60;
+    const power = Math.max(0, Math.round(Number(interval.power_w) || 150));
+    const label = interval.label || `Intervallo ${index + 1}`;
+    const row = document.createElement("div");
+    row.className = "interval-row";
+    row.innerHTML = `
+      <span class="interval-num">${String(index + 1).padStart(2, "0")}</span>
+      <input class="interval-label" type="text" maxlength="80" value="${escapeHtml(label)}" aria-label="Nome intervallo ${index + 1}">
+      <input class="interval-min" type="number" min="0" max="180" step="1" value="${minutes}" aria-label="Minuti intervallo ${index + 1}">
+      <span class="interval-colon">:</span>
+      <input class="interval-sec" type="number" min="0" max="59" step="1" value="${seconds}" aria-label="Secondi intervallo ${index + 1}">
+      <input class="interval-power" type="number" min="0" max="4000" step="1" value="${power}" aria-label="Watt intervallo ${index + 1}">
+      <button class="interval-remove" type="button" title="Rimuovi intervallo" aria-label="Rimuovi intervallo">&times;</button>`;
+    row.querySelectorAll("input").forEach((input) => {
+      input.addEventListener("input", updateWorkoutEditorSummary);
+    });
+    row.querySelector(".interval-remove").addEventListener("click", () => {
+      row.remove();
+      renumberIntervalRows();
+      updateWorkoutEditorSummary();
+    });
+    rows.appendChild(row);
+    renumberIntervalRows();
+    updateWorkoutEditorSummary();
+  }
+
+  function renumberIntervalRows() {
+    $("intervalRows").querySelectorAll(".interval-row").forEach((row, index) => {
+      row.querySelector(".interval-num").textContent = String(index + 1).padStart(2, "0");
+      row.querySelector(".interval-label").setAttribute(
+        "aria-label",
+        `Nome intervallo ${index + 1}`
+      );
+      row.querySelector(".interval-min").setAttribute(
+        "aria-label",
+        `Minuti intervallo ${index + 1}`
+      );
+      row.querySelector(".interval-sec").setAttribute(
+        "aria-label",
+        `Secondi intervallo ${index + 1}`
+      );
+      row.querySelector(".interval-power").setAttribute(
+        "aria-label",
+        `Watt intervallo ${index + 1}`
+      );
+    });
+  }
+
+  function openWorkoutEditor(workout = null) {
+    app.editingWorkoutId = workout ? workout.id : null;
+    $("workoutSheetTitle").textContent = workout ? "Modifica allenamento" : "Nuovo allenamento";
+    $("workoutSheetSub").textContent = workout
+      ? "Aggiorna nome, durata e watt target degli intervalli."
+      : "Costruisci una sequenza di intervalli con durata e watt target.";
+    $("workoutName").value = workout ? workout.name : "";
+    $("workoutDescription").value = workout ? workout.description || "" : "";
+    $("workoutNotes").value = workout ? workout.notes || "" : "";
+    $("intervalRows").innerHTML = "";
+    const intervals = workout && workout.intervals.length
+      ? workout.intervals
+      : [{ label: "Intervallo 1", duration_s: 600, power_w: 150 }];
+    $("btnDeleteWorkout").classList.toggle("hidden", !workout);
+    $("workoutSheet").hidden = false;
+    $("workoutSheet").querySelector(".workout-form").scrollTop = 0;
+    intervals.forEach((interval) => addIntervalRow(interval));
+    updateWorkoutEditorSummary();
+    setTimeout(() => $("workoutName").focus(), 30);
+  }
+
+  function closeWorkoutEditor() {
+    $("workoutSheet").hidden = true;
+    app.editingWorkoutId = null;
+  }
+
+  async function saveWorkoutFromEditor() {
+    const name = $("workoutName").value.trim();
+    const description = $("workoutDescription").value.trim();
+    const notes = $("workoutNotes").value.trim();
+    const intervals = workoutEditorData();
+    if (!name) {
+      toast("Dai un nome all'allenamento", true);
+      $("workoutName").focus();
+      return;
+    }
+    if (!intervals.length) {
+      toast("Aggiungi almeno un intervallo", true);
+      return;
+    }
+    if (intervals.some((interval) => interval.duration_s < 5)) {
+      toast("Ogni intervallo deve durare almeno 5 secondi", true);
+      return;
+    }
+    try {
+      const payload = {
+        name,
+        description,
+        notes,
+        intervals,
+      };
+      if (app.editingWorkoutId) payload.id = app.editingWorkoutId;
+      const data = await api("/api/workouts", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+      });
+      app.workouts = Array.isArray(data.workouts) ? data.workouts : [];
+      app.workoutsLoaded = true;
+      app.selectedWorkoutId = data.workout ? data.workout.id : app.selectedWorkoutId;
+      app.libraryStamp = "";
+      closeWorkoutEditor();
+      renderWorkoutLibrary(app.snapshot && app.snapshot.workout);
+      renderTargetCard(app.snapshot && app.snapshot.workout);
+      toast("Allenamento salvato");
+    } catch (err) {
+      toast(err.message, true);
+    }
+  }
+
+  async function deleteWorkoutFromEditor() {
+    if (!app.editingWorkoutId) return;
+    if (!confirm("Eliminare questo allenamento?")) return;
+    try {
+      const data = await api(`/api/workouts/${encodeURIComponent(app.editingWorkoutId)}`, {
+        method: "DELETE",
+      });
+      app.workouts = Array.isArray(data.workouts) ? data.workouts : [];
+      app.workoutsLoaded = true;
+      if (!workoutById(app.selectedWorkoutId)) {
+        app.selectedWorkoutId = app.workouts.length ? app.workouts[0].id : null;
+      }
+      app.libraryStamp = "";
+      closeWorkoutEditor();
+      renderWorkoutLibrary(app.snapshot && app.snapshot.workout);
+      renderTargetCard(app.snapshot && app.snapshot.workout);
+      toast("Allenamento eliminato");
+    } catch (err) {
+      toast(err.message, true);
+    }
+  }
+
+  function render(state) {
+    app.snapshot = state;
+    app.history = Array.isArray(state.history) ? state.history : [];
+    app.ftp = Number(state.config && state.config.ftp_w) || 179;
+    app.weight = Number(state.config && state.config.weight_kg) || 82;
+
+    setStatus(state);
+    renderControl(state);
+    renderWorkoutState(state);
+
+    const device = state.device || {};
+    const name = device.name && device.name !== "(senza nome)" ? device.name : "";
+    const maker = device.manufacturer ? `${device.manufacturer} ` : "";
+    const serial = device.serial ? ` · #${device.serial}` : "";
+    const batt = state.battery != null ? ` · batt ${state.battery}%` : "";
+    setText(
+      "deviceLabel",
+      name ? `${maker}${name}${serial}${batt}` : device.address || "nessun dispositivo connesso"
+    );
+
+    const m = state.metrics || { power_w: 0, speed_kmh: 0, cadence_rpm: 0 };
+    const power = Number(m.power_w) || 0;
+    const speed = Number(m.speed_kmh) || 0;
+    const cadence = Number(m.cadence_rpm) || 0;
+
+    setText("power", String(Math.round(power)));
+    setText("speed", speed.toFixed(1).replace(".", ","));
+    setText("cadence", String(Math.round(cadence)));
+
+    const pct = app.ftp > 0 ? power / app.ftp : 0;
+    const zone = zones().find((z) => pct <= z.max) || zones()[zones().length - 1];
+    const badge = $("zoneBadge");
+    badge.textContent = power > 5 ? zone.name : "-";
+    badge.style.color = power > 5 ? zone.color : "";
+    badge.style.borderColor = power > 5 ? zone.color + "55" : "";
+    setText("ftpLabel", `FTP ${app.ftp} W`);
+    setText("powerPct", `${Math.round(pct * 100)}%`);
+    const liveWkg = app.weight > 0 ? power / app.weight : 0;
+    setText("powerWkg", `${liveWkg.toFixed(1).replace(".", ",")} W/kg`);
+    const bar = $("powerBar");
+    bar.style.width = `${Math.max(0, Math.min(100, (pct / 1.5) * 100))}%`;
+    bar.style.background = `linear-gradient(90deg, ${zone.color}99, ${zone.color})`;
+
+    const s = state.stats || {};
+    setText("duration", fmtDuration(s.duration_s));
+    $("distance").innerHTML = `${(Number(s.distance_km) || 0).toFixed(2)} <small>km</small>`;
+    $("avgPower").innerHTML = `${Math.round(Number(s.avg_power_w) || 0)} <small>W</small>`;
+    $("maxPower").innerHTML = `${Math.round(Number(s.max_power_w) || 0)} <small>W</small>`;
+    $("avgSpeed").innerHTML = `${(Number(s.avg_speed_kmh) || 0).toFixed(1)} <small>km/h</small>`;
+    $("maxSpeed").innerHTML = `${(Number(s.max_speed_kmh) || 0).toFixed(1)} <small>km/h</small>`;
+    $("calories").innerHTML = `${Math.round(Number(s.calories_kcal) || 0)} <small>kcal</small>`;
+    $("avgWkg").innerHTML = `${(Number(s.avg_wkg) || 0).toFixed(1).replace(".", ",")} <small>W/kg</small>`;
+    setText("sessionId", state.session_id ? `sessione ${state.session_id}` : "-");
+
+    drawChart();
+    drawSpark("speedSpark", app.history.map((p) => p.s), COLORS.speed);
+    drawSpark("cadenceSpark", app.history.map((p) => p.c), COLORS.cadence);
+
+    const raw = Array.isArray(state.raw) ? state.raw : [];
+    const sourceNames = { "2a63": "CPS", "2ad2": "FTMS", "2a5b": "CSC", sim: "SIM" };
+    const uniqueSources = [...new Set(Object.values(state.sources || {}).filter(Boolean))];
+    setText(
+      "sourceLabel",
+      uniqueSources.map((source) => sourceNames[source] || source).join(" + ") || "-"
+    );
+    setText("rawCount", `${raw.length} frame`);
+    if ($("debugDetails").open) {
+      const sourceValues = state.source_values || {};
+      const fieldLabels = { power_w: "Potenza", speed_kmh: "Velocità", cadence_rpm: "Cadenza" };
+      const fieldUnits = { power_w: "W", speed_kmh: "km/h", cadence_rpm: "rpm" };
+      const sourceOrder = ["2ad2", "2a63", "2a5b", "sim"];
+      const header = sourceOrder
+        .map((source) => `<th>${sourceNames[source] || source}</th>`)
+        .join("");
+      const rows = Object.entries(fieldLabels).map(([field, label]) => {
+        const bySource = sourceValues[field] || {};
+        const cells = sourceOrder.map((source) => {
+          const item = bySource[source];
+          if (!item || item.value == null) return "<td>-</td>";
+          const active = (state.sources || {})[field] === source ? " active" : "";
+          const bad = item.valid === false ? " bad" : "";
+          return `<td class="${active}${bad}">${item.value} <small>${fieldUnits[field]}</small></td>`;
+        }).join("");
+        return `<tr><td>${label}</td>${cells}</tr>`;
+      }).join("");
+      const rejected = Array.isArray(state.rejected) ? state.rejected : [];
+      const rejectedHtml = rejected.length
+        ? `<div class="rejected-list">Scartati: ${rejected.slice(-4).reverse().map((item) => {
+            const unit = fieldUnits[item.field] || "";
+            return `${sourceNames[item.source] || item.source} ${item.value} ${unit}`;
+          }).join(" · ")}</div>`
+        : "";
+      $("sourceDetail").innerHTML = `
+        <table class="source-table">
+          <thead><tr><th>Fonte</th>${header}</tr></thead>
+          <tbody>${rows}</tbody>
+        </table>
+        <div class="source-note">Potenza da FTMS (carico del freno). CPS e CSC restano come confronto e riserva. I valori fuori range vengono scartati. Questi valori sono <b>grezzi</b>: la calibrazione è applicata alle metriche principali, allo storico e alle registrazioni.</div>
+        ${rejectedHtml}
+      `;
+      const log = $("rawLog");
+      log.innerHTML = raw.slice().reverse().map((frame) => `
+        <div class="line"><i>${frame.t}</i><b>${frame.uuid}</b><span>${frame.hex}</span></div>
+      `).join("") || '<div class="line"><i>nessun frame</i></div>';
+    }
+
+    if (state.error) {
+      if (app._lastError !== state.error) {
+        toast(state.error, true);
+        app._lastError = state.error;
+      }
+    } else {
+      app._lastError = null;
+    }
+
+    $("btnCsv").href = `/api/export.csv?t=${Math.floor(Date.now() / 1000)}`;
+  }
+
+  // ---------------------------------------------------------------- ws
+  function connectWS() {
+    if (app.ws && (app.ws.readyState === WebSocket.OPEN || app.ws.readyState === WebSocket.CONNECTING)) return;
+    const proto = location.protocol === "https:" ? "wss" : "ws";
+    const ws = new WebSocket(`${proto}://${location.host}/ws`);
+    app.ws = ws;
+    ws.onmessage = (event) => {
+      try { render(JSON.parse(event.data)); } catch (err) { console.error(err); }
+    };
+    ws.onclose = () => {
+      setTimeout(connectWS, 1200);
+    };
+    ws.onerror = () => ws.close();
+  }
+
+  // ---------------------------------------------------------------- actions
+  async function scan() {
+    const sheet = $("scanSheet");
+    const list = $("scanList");
+    sheet.hidden = false;
+    list.innerHTML = '<div class="no-sessions">Ricerca in corso… (qualche secondo)</div>';
+    try {
+      const data = await api("/api/devices");
+      if (!data.devices.length) {
+        list.innerHTML = '<div class="no-sessions">Nessun dispositivo trovato. Avvicina il sensore e pedala due giri, poi riprova.</div>';
+        return;
+      }
+      list.innerHTML = "";
+      data.devices.forEach((device) => {
+        const row = document.createElement("div");
+        row.className = "scan-row";
+        const badges = (device.profiles || []).map((p) => `<span class="badge">${p}</span>`).join("");
+        row.innerHTML = `
+          <div>
+            <div class="scan-name">${escapeHtml(device.name)}</div>
+            <div class="scan-meta">${badges || '<span class="badge">sconosciuto</span>'}${escapeHtml(device.address)}</div>
+          </div>
+          <div class="rssi">${device.rssi} dBm</div>`;
+        row.addEventListener("click", () => connectDevice(device.address));
+        list.appendChild(row);
+      });
+    } catch (err) {
+      list.innerHTML = `<div class="no-sessions">${escapeHtml(err.message)}</div>`;
+    }
+  }
+
+  async function connectDevice(address) {
+    try {
+      toast("Connessione in corso…");
+      await api("/api/connect", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ address }),
+      });
+      $("scanSheet").hidden = true;
+    } catch (err) {
+      toast(err.message, true);
+    }
+  }
+
+  async function disconnectDevice() {
+    try {
+      await api("/api/disconnect", { method: "POST" });
+      toast("Disconnesso");
+      loadSessions();
+    } catch (err) {
+      toast(err.message, true);
+    }
+  }
+
+  async function resetSession() {
+    if (!confirm("Chiudere la sessione corrente e salvare i dati?")) return;
+    try {
+      const out = await api("/api/session/reset", { method: "POST" });
+      toast(out.last_session ? "Sessione salvata" : "Nuova sessione");
+      loadSessions();
+    } catch (err) {
+      toast(err.message, true);
+    }
+  }
+
+  async function sendResistance(level) {
+    if (!Number.isFinite(level)) return;
+    try {
+      const state = await api("/api/resistance", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ level }),
+      });
+      toast(`Resistenza ${level.toFixed(1)}`);
+      if (state) render(state);
+    } catch (err) {
+      toast(err.message, true);
+      if (app.snapshot) render(app.snapshot);
+    }
+  }
+
+  async function sendErg() {
+    const input = $("ergInput");
+    const raw = input.value.trim();
+    const watts = Number(raw);
+    if (!raw || !Number.isFinite(watts)) {
+      toast("Inserisci i watt per l'ERG", true);
+      return;
+    }
+    try {
+      const state = await api("/api/erg", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ watts: Math.round(watts) }),
+      });
+      toast(`ERG ${Math.round(watts)} W`);
+      if (state) render(state);
+    } catch (err) {
+      toast(err.message, true);
+      if (app.snapshot) render(app.snapshot);
+    }
+  }
+
+  async function toggleRoad() {
+    const active = Boolean(app.snapshot && app.snapshot.control && app.snapshot.control.simulation);
+    try {
+      const state = await api("/api/simulation", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          enabled: !active,
+          grade_pct: 0,
+          rolling_resistance: 0.005,
+          aerodynamic_drag: 0.35,
+        }),
+      });
+      toast(active ? "Resistenza manuale" : "Strada simulata attiva");
+      if (state) render(state);
+    } catch (err) {
+      toast(err.message, true);
+      if (app.snapshot) render(app.snapshot);
+    }
+  }
+
+  async function startSelectedWorkout() {
+    if (!app.selectedWorkoutId) {
+      toast("Scegli un allenamento", true);
+      return;
+    }
+    try {
+      const state = await api("/api/workout/start", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ id: app.selectedWorkoutId }),
+      });
+      app.timelineWorkoutId = null;
+      app.lastWorkoutIndex = null;
+      render(state);
+      toast("Allenamento avviato · nuova sessione");
+      if (state.last_session) loadSessions();
+    } catch (err) {
+      toast(err.message, true);
+    }
+  }
+
+  async function togglePauseWorkout() {
+    const workout = app.snapshot && app.snapshot.workout;
+    if (!workout || !workout.active) return;
+    const path = workout.status === "paused" ? "/api/workout/resume" : "/api/workout/pause";
+    try {
+      const state = await api(path, { method: "POST" });
+      render(state);
+      toast(workout.status === "paused" ? "Allenamento ripreso" : "Allenamento in pausa");
+    } catch (err) {
+      toast(err.message, true);
+    }
+  }
+
+  async function stopActiveWorkout() {
+    const workout = app.snapshot && app.snapshot.workout;
+    if (!workout || !workout.active) return;
+    const message =
+      workout.status === "completed"
+        ? "Chiudere l'allenamento completato?"
+        : "Terminare l'allenamento? La sessione resta aperta.";
+    if (!confirm(message)) return;
+    try {
+      const state = await api("/api/workout/stop", { method: "POST" });
+      app.timelineWorkoutId = null;
+      app.lastWorkoutIndex = null;
+      render(state);
+      toast("Allenamento terminato");
+    } catch (err) {
+      toast(err.message, true);
+    }
+  }
+
+  async function saveSettings() {
+    try {
+      const wheel = Number($("wheelInput").value);
+      const ftp = Number($("ftpInput").value);
+      const weight = Number($("weightInput").value);
+      const debug = $("debugInput").checked;
+      const powerOffset = Number($("powerOffsetInput").value);
+      const speedOffset = Number($("speedOffsetInput").value);
+      const state = await api("/api/config", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          wheel_circumference_mm: wheel,
+          ftp_w: ftp,
+          weight_kg: weight,
+          debug,
+          power_offset_w: powerOffset,
+          speed_offset_kmh: speedOffset,
+        }),
+      });
+      $("settingsSheet").hidden = true;
+      toast("Impostazioni salvate");
+      if (state) render(state);
+    } catch (err) {
+      toast(err.message, true);
+    }
+  }
+
+  async function loadSessions() {
+    try {
+      const data = await api("/api/sessions");
+      const list = $("sessions");
+      if (!data.sessions.length) {
+        list.innerHTML = '<div class="no-sessions">Nessuna attività salvata. Le sessioni vengono scritte alla chiusura.</div>';
+        return;
+      }
+      list.innerHTML = "";
+      data.sessions.forEach((s) => {
+        const row = document.createElement("div");
+        row.className = "session-row";
+        const when = s.started_at ? new Date(s.started_at).toLocaleString("it-IT", {
+          day: "2-digit", month: "short", hour: "2-digit", minute: "2-digit",
+        }) : s.id;
+        const wkg = Number(s.avg_wkg);
+        const kcal = Number(s.calories_kcal);
+        const extra = [
+          Number.isFinite(wkg) && wkg > 0 ? `${wkg.toFixed(1).replace(".", ",")} W/kg` : "",
+          Number.isFinite(kcal) && kcal > 0 ? `${Math.round(kcal)} kcal` : "",
+        ].filter(Boolean).join(" · ");
+        row.innerHTML = `
+          <span class="when">${escapeHtml(when)}</span>
+          <span class="fig">${fmtDuration(s.duration_s)} · ${Number(s.distance_km || 0).toFixed(1)} km · ${Math.round(Number(s.avg_power_w) || 0)} W${extra ? ` · ${extra}` : ""}</span>
+          <span class="session-links">
+            <a href="/api/sessions/${encodeURIComponent(s.id)}/tcx">TCX</a>
+            <a href="/api/sessions/${encodeURIComponent(s.csv)}">CSV</a>
+          </span>`;
+        list.appendChild(row);
+      });
+    } catch (err) {
+      $("sessions").innerHTML = `<div class="no-sessions">${escapeHtml(err.message)}</div>`;
+    }
+  }
+
+  function escapeHtml(value) {
+    return String(value == null ? "" : value).replace(/[&<>"']/g, (ch) => ({
+      "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;",
+    }[ch]));
+  }
+
+  // ---------------------------------------------------------------- mini player
+  let miniWindow = null;
+  let miniHtmlPromise = null;
+
+  function miniHtml() {
+    if (!miniHtmlPromise) {
+      miniHtmlPromise = fetch("/mini", { cache: "no-store" })
+        .then((response) => {
+          if (!response.ok) throw new Error("mini player non disponibile");
+          return response.text();
+        })
+        .then((html) => html.replace('"__QUBO_HOST__"', JSON.stringify(location.host)))
+        .catch((error) => {
+          miniHtmlPromise = null;
+          throw error;
+        });
+    }
+    return miniHtmlPromise;
+  }
+
+  function updateMiniButton() {
+    const button = $("btnMini");
+    const open = Boolean(miniWindow && !miniWindow.closed);
+    button.classList.toggle("active", open);
+    button.setAttribute("aria-pressed", open ? "true" : "false");
+    button.setAttribute("aria-label", open ? "Chiudi mini player" : "Apri mini player");
+    button.title = open ? "Chiudi mini player" : "Mini player";
+  }
+
+  async function openMiniPlayer() {
+    if (miniWindow && !miniWindow.closed) {
+      miniWindow.close();
+      miniWindow = null;
+      updateMiniButton();
+      return;
+    }
+
+    let target = null;
+    try {
+      if ("documentPictureInPicture" in window) {
+        target = await window.documentPictureInPicture.requestWindow({
+          width: 420,
+          height: 320,
+        });
+      } else {
+        target = window.open(
+          "",
+          "quboMiniPlayer",
+          "popup=yes,width=420,height=320"
+        );
+        if (!target) throw new Error("popup bloccato dal browser");
+      }
+    } catch (error) {
+      toast("Mini player non disponibile in questo browser", true);
+      return;
+    }
+
+    miniWindow = target;
+    try {
+      const html = await miniHtml();
+      target.document.open();
+      target.document.write(html);
+      target.document.close();
+      target.addEventListener("pagehide", () => {
+        miniWindow = null;
+        updateMiniButton();
+      });
+      updateMiniButton();
+    } catch (error) {
+      target.close();
+      miniWindow = null;
+      updateMiniButton();
+      toast(error.message || "Mini player non disponibile", true);
+    }
+  }
+
+  miniHtml().catch(() => {});
+  updateMiniButton();
+
+  // ---------------------------------------------------------------- wiring
+  $("btnScan").addEventListener("click", scan);
+  $("btnMini").addEventListener("click", openMiniPlayer);
+  $("btnDisconnect").addEventListener("click", disconnectDevice);
+  $("btnReset").addEventListener("click", resetSession);
+  $("btnRefresh").addEventListener("click", loadSessions);
+  $("btnSaveSettings").addEventListener("click", saveSettings);
+
+  $("btnStartWorkout").addEventListener("click", startSelectedWorkout);
+  $("btnPauseWorkout").addEventListener("click", togglePauseWorkout);
+  $("btnStopWorkout").addEventListener("click", stopActiveWorkout);
+  $("btnNewWorkout").addEventListener("click", () => openWorkoutEditor());
+  $("btnEditWorkout").addEventListener("click", () => {
+    const workout = workoutById(app.selectedWorkoutId);
+    if (workout) openWorkoutEditor(workout);
+  });
+  $("btnAddInterval").addEventListener("click", () => addIntervalRow());
+  $("btnSaveWorkout").addEventListener("click", saveWorkoutFromEditor);
+  $("btnDeleteWorkout").addEventListener("click", deleteWorkoutFromEditor);
+
+  const resistanceSlider = $("resistanceSlider");
+  resistanceSlider.addEventListener("input", () => {
+    app.resistanceDragging = true;
+    updateResistanceDisplay(resistanceSlider.value, true);
+  });
+  resistanceSlider.addEventListener("change", () => {
+    app.resistanceDragging = false;
+    sendResistance(Number(resistanceSlider.value));
+  });
+
+  document.querySelectorAll("[data-resistance]").forEach((el) => {
+    el.addEventListener("click", () => {
+      const value = Number(el.dataset.resistance);
+      resistanceSlider.value = value;
+      updateResistanceDisplay(value, true);
+      sendResistance(value);
+    });
+  });
+
+  $("btnErg").addEventListener("click", sendErg);
+  $("btnRoad").addEventListener("click", toggleRoad);
+  $("ergInput").addEventListener("keydown", (e) => {
+    if (e.key === "Enter") {
+      e.preventDefault();
+      sendErg();
+    }
+  });
+
+  $("btnSettings").addEventListener("click", () => {
+    const cfg = (app.snapshot && app.snapshot.config) || {};
+    $("wheelInput").value = cfg.wheel_circumference_mm || 94;
+    $("ftpInput").value = cfg.ftp_w || 179;
+    $("weightInput").value = cfg.weight_kg || 82;
+    $("powerOffsetInput").value = cfg.power_offset_w ?? 50;
+    $("speedOffsetInput").value = cfg.speed_offset_kmh ?? 2.5;
+    $("debugInput").checked = cfg.debug !== false;
+    $("settingsSheet").hidden = false;
+  });
+
+  document.querySelectorAll("[data-wheel]").forEach((el) => {
+    el.addEventListener("click", () => {
+      $("wheelInput").value = el.dataset.wheel;
+    });
+  });
+
+  document.querySelectorAll("[data-close]").forEach((el) => {
+    el.addEventListener("click", () => {
+      $("scanSheet").hidden = true;
+      $("settingsSheet").hidden = true;
+      closeWorkoutEditor();
+    });
+  });
+
+  document.addEventListener("keydown", (e) => {
+    if (e.key === "Escape") {
+      $("scanSheet").hidden = true;
+      $("settingsSheet").hidden = true;
+      closeWorkoutEditor();
+    }
+  });
+
+  $("debugDetails").addEventListener("toggle", () => render(app.snapshot || {}));
+  window.addEventListener("resize", () => {
+    drawChart();
+    drawSpark("speedSpark", app.history.map((p) => p.s), COLORS.speed);
+    drawSpark("cadenceSpark", app.history.map((p) => p.c), COLORS.cadence);
+    if (!$("workoutSheet").hidden) updateWorkoutEditorSummary();
+  });
+
+  // ---------------------------------------------------------------- theme
+  function applyTheme(theme) {
+    root.dataset.theme = theme;
+    try { localStorage.setItem("qubo-theme", theme); } catch (err) { /* storage opzionale */ }
+    const meta = $("metaTheme");
+    if (meta) meta.content = cssVar("--bg");
+    const dark = theme !== "light";
+    const btn = $("btnTheme");
+    if (btn) {
+      btn.setAttribute("aria-label", dark ? "Passa al tema chiaro" : "Passa al tema scuro");
+      btn.title = dark ? "Tema chiaro" : "Tema scuro";
+      const sun = btn.querySelector(".icon-sun");
+      const moon = btn.querySelector(".icon-moon");
+      if (sun) sun.style.display = dark ? "" : "none";
+      if (moon) moon.style.display = dark ? "none" : "";
+    }
+    COLORS = readPalette();
+    drawChart();
+    drawSpark("speedSpark", app.history.map((p) => p.s), COLORS.speed);
+    drawSpark("cadenceSpark", app.history.map((p) => p.c), COLORS.cadence);
+    if (!$("workoutSheet").hidden) updateWorkoutEditorSummary();
+  }
+
+  $("btnTheme").addEventListener("click", () => {
+    applyTheme(root.dataset.theme === "light" ? "dark" : "light");
+  });
+
+  applyTheme(root.dataset.theme === "light" ? "light" : "dark");
+
+  connectWS();
+  loadSessions();
+  loadWorkouts();
+  setInterval(() => {
+    if (app.snapshot) render(app.snapshot);
+  }, 1000);
+})();
+</script>
+</body>
+</html>
