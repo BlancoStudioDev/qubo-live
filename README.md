@@ -144,12 +144,14 @@ compaiono fra le attività reali e non inquinano le statistiche.
 ## 3. Allenamenti strutturati
 
 La libreria è persistita in `data/workouts.json`. Se il file manca, il server
-crea la libreria del piano invernale: **Test FTP 20 min**, **VO2max 4x3**,
+crea la libreria del piano invernale: **Test FTP 20 min**, **Climb 3x12**,
+**Climb 2x20**, **Climb 1x30**, **Over-under 3x9**, **VO2max 4x3**,
 **VO2max 5x3**, **VO2max 4x4**, **VO2max 3x3 scarico**, **Soglia 3x8**,
 **Soglia 3x10**, **Soglia 2x20**, **Soglia 2x10 scarico**, **Sweet spot 3x12**,
-**Endurance 60**, **Endurance 75** e **Recupero 45**. Il piano completo di 12
-settimane e la nutrizione sono in `PIANO_ALLENAMENTO.md`. Sono modificabili e
-cancellabili dalla dashboard; il seed viene rifatto solo se il file non esiste.
+**Endurance 60**, **Endurance 60 + sprint**, **Endurance 75** e **Recupero 45**.
+Il piano completo di 12 settimane e la nutrizione sono in
+`PIANO_ALLENAMENTO.md`. Sono modificabili e cancellabili dalla dashboard; il
+seed viene rifatto solo se il file non esiste.
 
 Un allenamento è una sequenza di intervalli con durata in secondi e potenza
 target assoluta in watt:
