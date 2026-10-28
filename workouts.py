@@ -42,6 +42,44 @@ def _iv(label: str, minutes: float, power_w: int) -> dict[str, Any]:
     }
 
 
+def _cadence_for(workout_id: str, label: str) -> tuple[int, int] | None:
+    """Return the default cadence range for a known interval label."""
+    text = label.strip().lower()
+    if workout_id == "climb-3x12" and text.startswith("climb"):
+        return 65, 75
+    if workout_id == "climb-2x20" and text.startswith("climb"):
+        return 70, 85
+    if workout_id == "climb-1x30" and text.startswith("climb"):
+        return 75, 85
+    if (
+        text.startswith("recupero sprint")
+        or text.startswith("recupero")
+        or text.startswith("easy")
+    ):
+        return 80, 90
+    if text.startswith("sprint"):
+        return 100, 120
+    if text.startswith("vo2max"):
+        return 95, 105
+    if text.startswith("soglia") or text.startswith("sweet spot"):
+        return 85, 95
+    if text.startswith("sotto") or text.startswith("sopra"):
+        return 80, 90
+    if text.startswith("test ftp"):
+        return 85, 95
+    if text.startswith("fast"):
+        return 95, 105
+    if text.startswith("endurance"):
+        return 85, 95
+    if text.startswith("riscaldamento"):
+        return 85, 95
+    if text.startswith("defaticamento") or text.startswith("spin"):
+        return 80, 90
+    if text.startswith("climb"):
+        return 75, 85
+    return None
+
+
 def _workout(
     identifier: str,
     name: str,
@@ -50,12 +88,19 @@ def _workout(
     now: str,
     notes: str = "",
 ) -> dict[str, Any]:
+    enriched: list[dict[str, Any]] = []
+    for item in intervals:
+        interval = dict(item)
+        cadence = _cadence_for(identifier, str(interval.get("label") or ""))
+        if cadence is not None:
+            interval["cadence_min"], interval["cadence_max"] = cadence
+        enriched.append(interval)
     return {
         "id": identifier,
         "name": name,
         "description": description,
         "notes": notes,
-        "intervals": intervals,
+        "intervals": enriched,
         "builtin": True,
         "created_at": now,
         "updated_at": now,
@@ -421,27 +466,44 @@ def normalize_workout(
     if len(raw_intervals) > MAX_INTERVALS:
         raise ValueError(f"massimo {MAX_INTERVALS} intervalli")
 
+    identifier = _slug(workout_id or name)
     intervals: list[dict[str, Any]] = []
     for index, item in enumerate(raw_intervals):
         if not isinstance(item, dict):
             raise ValueError(f"intervallo {index + 1} non valido")
         label = str(item.get("label") or f"Intervallo {index + 1}").strip()
-        intervals.append(
-            {
-                "label": label[:MAX_NAME] or f"Intervallo {index + 1}",
-                "duration_s": _as_int(
-                    item.get("duration_s"),
-                    "durata",
-                    MIN_INTERVAL_S,
-                    MAX_INTERVAL_S,
-                ),
-                "power_w": _as_int(
-                    item.get("power_w", 0), "potenza", 0, MAX_POWER_W
-                ),
-            }
-        )
+        cadence_min = None
+        cadence_max = None
+        if item.get("cadence_min") not in (None, ""):
+            cadence_min = _as_int(item.get("cadence_min"), "cadenza minima", 20, 250)
+        if item.get("cadence_max") not in (None, ""):
+            cadence_max = _as_int(item.get("cadence_max"), "cadenza massima", 20, 250)
+        if cadence_min is None and cadence_max is None:
+            default_cadence = _cadence_for(identifier, label)
+            if default_cadence is not None:
+                cadence_min, cadence_max = default_cadence
+        elif cadence_min is None or cadence_max is None:
+            raise ValueError(f"cadenza incompleta nell'intervallo {index + 1}")
+        if cadence_min is not None and cadence_max is not None:
+            if cadence_min > cadence_max:
+                raise ValueError(f"cadenza non valida nell'intervallo {index + 1}")
+        interval = {
+            "label": label[:MAX_NAME] or f"Intervallo {index + 1}",
+            "duration_s": _as_int(
+                item.get("duration_s"),
+                "durata",
+                MIN_INTERVAL_S,
+                MAX_INTERVAL_S,
+            ),
+            "power_w": _as_int(
+                item.get("power_w", 0), "potenza", 0, MAX_POWER_W
+            ),
+        }
+        if cadence_min is not None and cadence_max is not None:
+            interval["cadence_min"] = cadence_min
+            interval["cadence_max"] = cadence_max
+        intervals.append(interval)
 
-    identifier = _slug(workout_id or name)
     now = _now_iso()
     return {
         "id": identifier,

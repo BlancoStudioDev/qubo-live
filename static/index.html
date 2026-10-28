@@ -304,6 +304,29 @@
   .target-clock span:first-child { color: var(--cadence); }
   .target.paused .target-clock span:first-child { color: var(--warn); }
   .target.completed .target-clock span:first-child { color: var(--muted); }
+  .target-cadence {
+    display: flex; align-items: center; justify-content: space-between; gap: 12px;
+    margin-top: 10px; padding: 9px 11px; border-radius: 9px;
+    border: 1px solid color-mix(in srgb, var(--cadence) 30%, var(--line-soft));
+    background: color-mix(in srgb, var(--cadence) 7%, transparent);
+  }
+  .target-cadence span {
+    color: var(--muted); font: 600 9.5px/1 var(--mono);
+    letter-spacing: .1em; text-transform: uppercase;
+  }
+  .target-cadence strong {
+    color: var(--cadence); font: 700 17px/1 var(--mono);
+    font-variant-numeric: tabular-nums; white-space: nowrap;
+  }
+  .target.idle .target-cadence {
+    border-color: var(--line-soft); background: transparent;
+  }
+  .target.idle .target-cadence strong { color: var(--muted-2); }
+  .target.paused .target-cadence {
+    border-color: color-mix(in srgb, var(--warn) 32%, var(--line-soft));
+    background: color-mix(in srgb, var(--warn) 6%, transparent);
+  }
+  .target.paused .target-cadence strong { color: var(--warn); }
   .target-meter { height: 5px; margin-top: 13px; }
   .target-meter > div {
     background: linear-gradient(90deg, color-mix(in srgb, var(--cadence) 45%, transparent), var(--cadence));
@@ -657,18 +680,19 @@
   }
   .interval-head {
     display: grid;
-    grid-template-columns: 28px minmax(130px, 1fr) 54px 10px 54px 76px 26px;
+    grid-template-columns: 28px minmax(120px, 1fr) 50px 10px 50px 70px 74px 26px;
     gap: 7px; align-items: center; padding: 13px 4px 6px;
     color: var(--muted-2); font: 600 9px/1 var(--mono);
     letter-spacing: .08em; text-transform: uppercase;
   }
   .interval-head span:nth-child(3),
   .interval-head span:nth-child(5),
-  .interval-head span:nth-child(6) { text-align: right; }
+  .interval-head span:nth-child(6),
+  .interval-head span:nth-child(7) { text-align: right; }
   .interval-rows { display: flex; flex-direction: column; }
   .interval-row {
     display: grid;
-    grid-template-columns: 28px minmax(130px, 1fr) 54px 10px 54px 76px 26px;
+    grid-template-columns: 28px minmax(120px, 1fr) 50px 10px 50px 70px 74px 26px;
     gap: 7px; align-items: center; padding: 7px 4px;
     border-top: 1px solid var(--line-soft);
   }
@@ -845,8 +869,8 @@
     .stats dd { font-size: 18px; }
     .interval-head { display: none; }
     .interval-row {
-      grid-template-columns: 22px minmax(90px, 1fr) 44px 8px 44px 64px 24px;
-      gap: 5px;
+      grid-template-columns: 20px minmax(68px, 1fr) 34px 6px 34px 48px 58px 20px;
+      gap: 4px;
     }
   }
   @media (max-width: 560px) {
@@ -899,6 +923,10 @@
         <div class="target-body">
           <div class="target-row"><span id="targetInterval">Nessun allenamento attivo</span><span id="targetPct"></span></div>
           <div class="target-row target-clock"><span id="targetRemaining">Scegli un workout</span><span id="targetElapsed"></span></div>
+          <div class="target-cadence">
+            <span>Cadenza target</span>
+            <strong id="targetCadence">-</strong>
+          </div>
           <div class="meter target-meter"><div id="targetBar"></div></div>
           <div class="target-next" id="targetNext">Il target è una guida: pedala per restare vicino alla linea.</div>
         </div>
@@ -1151,7 +1179,7 @@
         <span class="interval-editor-total" id="workoutTotal">-</span>
       </div>
       <div class="interval-head">
-        <span>#</span><span>Nome</span><span>Min</span><span></span><span>Sec</span><span>Watt</span><span></span>
+        <span>#</span><span>Nome</span><span>Min</span><span></span><span>Sec</span><span>Watt</span><span>Cadenza</span><span></span>
       </div>
       <div class="interval-rows" id="intervalRows"></div>
       <button class="btn small ghost workout-add" id="btnAddInterval" type="button">Aggiungi intervallo</button>
@@ -1842,6 +1870,19 @@
     return Math.round(weighted / total);
   }
 
+  function cadenceRange(interval) {
+    if (!interval) return "";
+    const min = Number(interval.cadence_min);
+    const max = Number(interval.cadence_max);
+    if (!Number.isFinite(min) || min <= 0) return "";
+    if (!Number.isFinite(max) || max <= 0) {
+      return `${Math.round(min)} rpm`;
+    }
+    return min === max
+      ? `${Math.round(min)} rpm`
+      : `${Math.round(min)}-${Math.round(max)} rpm`;
+  }
+
   function renderChartHeader(workout) {
     const active = Boolean(workout && workout.active);
     const title = $("chartTitle");
@@ -1878,6 +1919,7 @@
       const selected = workoutById(app.selectedWorkoutId);
       const first = selected && (selected.intervals || [])[0];
       power.textContent = first ? String(Math.round(Number(first.power_w) || 0)) : "--";
+      setText("targetCadence", cadenceRange(first) || "-");
       if (selected) {
         const count = selected.interval_count || (selected.intervals || []).length;
         setText("targetInterval", `Pronto: ${selected.name}`);
@@ -1909,6 +1951,7 @@
     const target = workout.target_power;
     status.textContent = paused ? "in pausa" : completed ? "completato" : "in corso";
     power.textContent = target == null ? "-" : String(Math.round(Number(target)));
+    setText("targetCadence", cadenceRange(current) || "libera");
     const index = Number(current.index || 0) + 1;
     setText(
       "targetInterval",
@@ -1942,9 +1985,11 @@
     if (completed) {
       $("targetNext").innerHTML = `Hai completato <b>${escapeHtml(workout.name)}</b>. Premi <b>Concludi</b> per salvare e chiudere la sessione.`;
     } else if (next) {
-      $("targetNext").innerHTML = `Prossimo: <b>${escapeHtml(next.label)}</b>, ${fmtDuration(next.duration_s)}, <b>${Math.round(Number(next.power_w) || 0)} W</b>`;
+      const nextCadence = cadenceRange(next);
+      $("targetNext").innerHTML = `Prossimo: <b>${escapeHtml(next.label)}</b>, ${fmtDuration(next.duration_s)}, <b>${Math.round(Number(next.power_w) || 0)} W</b>${nextCadence ? ` · ${nextCadence}` : ""}`;
     } else {
-      $("targetNext").innerHTML = `Ultimo intervallo: <b>${Math.round(Number(current.power_w) || 0)} W</b>`;
+      const currentCadence = cadenceRange(current);
+      $("targetNext").innerHTML = `Ultimo intervallo: <b>${Math.round(Number(current.power_w) || 0)} W</b>${currentCadence ? ` · ${currentCadence}` : ""}`;
     }
   }
 
@@ -2030,8 +2075,9 @@
     const current = workout.current || {};
     const index = Number(current.index || 0);
     setText("workoutActiveName", workout.name || "Allenamento");
+    const activeCadence = cadenceRange(current);
     $("workoutActiveMeta").innerHTML =
-      `${fmtDuration(workout.elapsed_s)} / ${fmtDuration(workout.total_s)}<br>intervallo ${index + 1} / ${workout.intervals.length}`;
+      `${fmtDuration(workout.elapsed_s)} / ${fmtDuration(workout.total_s)}<br>intervallo ${index + 1} / ${workout.intervals.length}${activeCadence ? ` · ${activeCadence}` : ""}`;
     $("workoutOverallBar").style.width =
       `${Math.min(100, Math.max(0, (Number(workout.progress) || 0) * 100))}%`;
     setText(
@@ -2142,11 +2188,26 @@
       const seconds = Number(row.querySelector(".interval-sec").value) || 0;
       const power = Number(row.querySelector(".interval-power").value) || 0;
       const label = row.querySelector(".interval-label").value.trim();
-      return {
+      const cadenceText = row.querySelector(".interval-cadence").value.trim();
+      const interval = {
         label: label || `Intervallo ${index + 1}`,
         duration_s: Math.round(minutes * 60 + seconds),
         power_w: Math.round(power),
       };
+      const match = cadenceText.match(/^(\d{1,3})(?:\s*[-/]\s*(\d{1,3}))?$/);
+      if (match) {
+        const cadenceMin = Number(match[1]);
+        const cadenceMax = match[2] ? Number(match[2]) : cadenceMin;
+        if (
+          cadenceMin >= 20 &&
+          cadenceMax <= 250 &&
+          cadenceMin <= cadenceMax
+        ) {
+          interval.cadence_min = cadenceMin;
+          interval.cadence_max = cadenceMax;
+        }
+      }
+      return interval;
     });
   }
 
@@ -2262,6 +2323,14 @@
     const minutes = Math.floor(duration / 60);
     const seconds = duration % 60;
     const power = Math.max(0, Math.round(Number(interval.power_w) || 150));
+    const cadenceMin = Number(interval.cadence_min);
+    const cadenceMax = Number(interval.cadence_max);
+    const cadenceText =
+      Number.isFinite(cadenceMin) && cadenceMin > 0
+        ? Number.isFinite(cadenceMax) && cadenceMax > cadenceMin
+          ? `${cadenceMin}-${cadenceMax}`
+          : `${cadenceMin}`
+        : "";
     const label = interval.label || `Intervallo ${index + 1}`;
     const row = document.createElement("div");
     row.className = "interval-row";
@@ -2272,6 +2341,7 @@
       <span class="interval-colon">:</span>
       <input class="interval-sec" type="number" min="0" max="59" step="1" value="${seconds}" aria-label="Secondi intervallo ${index + 1}">
       <input class="interval-power" type="number" min="0" max="4000" step="1" value="${power}" aria-label="Watt intervallo ${index + 1}">
+      <input class="interval-cadence" type="text" maxlength="7" value="${escapeHtml(cadenceText)}" placeholder="65-75" aria-label="Cadenza intervallo ${index + 1}">
       <button class="interval-remove" type="button" title="Rimuovi intervallo" aria-label="Rimuovi intervallo">&times;</button>`;
     row.querySelectorAll("input").forEach((input) => {
       input.addEventListener("input", updateWorkoutEditorSummary);
@@ -2305,6 +2375,10 @@
         "aria-label",
         `Watt intervallo ${index + 1}`
       );
+      row.querySelector(".interval-cadence").setAttribute(
+        "aria-label",
+        `Cadenza intervallo ${index + 1}`
+      );
     });
   }
 
@@ -2312,8 +2386,8 @@
     app.editingWorkoutId = workout ? workout.id : null;
     $("workoutSheetTitle").textContent = workout ? "Modifica allenamento" : "Nuovo allenamento";
     $("workoutSheetSub").textContent = workout
-      ? "Aggiorna nome, durata e watt target degli intervalli."
-      : "Costruisci una sequenza di intervalli con durata e watt target.";
+      ? "Aggiorna nome, durata, watt e cadenza target degli intervalli."
+      : "Costruisci una sequenza di intervalli con durata, watt e cadenza target.";
     $("workoutName").value = workout ? workout.name : "";
     $("workoutDescription").value = workout ? workout.description || "" : "";
     $("workoutNotes").value = workout ? workout.notes || "" : "";
@@ -2350,6 +2424,19 @@
     }
     if (intervals.some((interval) => interval.duration_s < 5)) {
       toast("Ogni intervallo deve durare almeno 5 secondi", true);
+      return;
+    }
+    const invalidCadence = [...$("intervalRows").querySelectorAll(".interval-row")].some((row) => {
+      const text = row.querySelector(".interval-cadence").value.trim();
+      if (!text) return false;
+      const match = text.match(/^(\d{1,3})(?:\s*[-/]\s*(\d{1,3}))?$/);
+      if (!match) return true;
+      const min = Number(match[1]);
+      const max = match[2] ? Number(match[2]) : min;
+      return min < 20 || max > 250 || min > max;
+    });
+    if (invalidCadence) {
+      toast("Cadenza non valida: usa un valore o un intervallo, per esempio 65-75 rpm", true);
       return;
     }
     try {

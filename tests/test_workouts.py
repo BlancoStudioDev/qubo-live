@@ -34,10 +34,39 @@ class WorkoutNotesTests(unittest.TestCase):
         workout = normalize_workout(workout_payload())
         self.assertEqual(workout_summary(workout)["notes"], workout["notes"])
 
+    def test_cadence_range_is_kept(self):
+        payload = workout_payload()
+        payload["intervals"][1]["cadence_min"] = 65
+        payload["intervals"][1]["cadence_max"] = 75
+        workout = normalize_workout(payload)
+        self.assertEqual(workout["intervals"][1]["cadence_min"], 65)
+        self.assertEqual(workout["intervals"][1]["cadence_max"], 75)
+
+    def test_cadence_is_filled_from_known_interval_labels(self):
+        workout = normalize_workout(workout_payload())
+        self.assertEqual(workout["intervals"][0]["cadence_min"], 85)
+        self.assertEqual(workout["intervals"][0]["cadence_max"], 95)
+        self.assertEqual(workout["intervals"][1]["cadence_min"], 95)
+        self.assertEqual(workout["intervals"][1]["cadence_max"], 105)
+
+    def test_invalid_cadence_range_is_rejected(self):
+        payload = workout_payload()
+        payload["intervals"][1]["cadence_min"] = 100
+        payload["intervals"][1]["cadence_max"] = 80
+        with self.assertRaises(ValueError):
+            normalize_workout(payload)
+
     def test_default_library_has_notes_for_every_workout(self):
         library = default_workouts()
         self.assertTrue(library)
         self.assertTrue(all(item["notes"].strip() for item in library))
+        self.assertTrue(
+            all(
+                "cadence_min" in interval and "cadence_max" in interval
+                for workout in library
+                for interval in workout["intervals"]
+            )
+        )
 
     def test_tcx_notes_say_laps_are_only_summaries(self):
         notes = {item["id"]: item["notes"] for item in default_workouts()}

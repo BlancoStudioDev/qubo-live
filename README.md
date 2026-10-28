@@ -153,8 +153,8 @@ Il piano completo di 12 settimane e la nutrizione sono in
 `PIANO_ALLENAMENTO.md`. Sono modificabili e cancellabili dalla dashboard; il
 seed viene rifatto solo se il file non esiste.
 
-Un allenamento è una sequenza di intervalli con durata in secondi e potenza
-target assoluta in watt:
+Un allenamento è una sequenza di intervalli con durata in secondi, potenza
+target assoluta in watt e, opzionalmente, cadenza target:
 
 ```json
 {
@@ -166,9 +166,9 @@ target assoluta in watt:
       "notes": "OBIETTIVO: consolidare il VO2max...\nCADENZA: 95-105 rpm...",
       "builtin": true,
       "intervals": [
-        { "label": "Riscaldamento", "duration_s": 600, "power_w": 117 },
-        { "label": "VO2max 1", "duration_s": 180, "power_w": 208 },
-        { "label": "Recupero 1", "duration_s": 180, "power_w": 100 }
+        { "label": "Riscaldamento", "duration_s": 600, "power_w": 117, "cadence_min": 85, "cadence_max": 95 },
+        { "label": "VO2max 1", "duration_s": 180, "power_w": 208, "cadence_min": 95, "cadence_max": 105 },
+        { "label": "Recupero 1", "duration_s": 180, "power_w": 100, "cadence_min": 80, "cadence_max": 90 }
       ]
     }
   ]
@@ -176,8 +176,8 @@ target assoluta in watt:
 ```
 
 Il server valida i dati: da 1 a 48 intervalli, durata tra 5 secondi e 3 ore,
-potenza tra 0 e 4000 W, nome fino a 80 caratteri, descrizione fino a 280 e
-note fino a 6000.
+potenza tra 0 e 4000 W, cadenza tra 20 e 250 rpm, nome fino a 80 caratteri,
+descrizione fino a 280 e note fino a 6000.
 
 La libreria inclusa è calibrata sulla **FTP 179 W**: VO2max circa 112-119%
 FTP, soglia 95-102%, sweet spot 91%, endurance 70%. Se cambi FTP, riscala i
@@ -186,8 +186,8 @@ target con `nuova_FTP / 179` oppure modifica gli intervalli dalla dashboard.
 ### Come si usa
 
 1. Scegli un allenamento nella lista e premi **Avvia allenamento**.
-2. La **target card** mostra l'intervallo corrente, la potenza target, il tempo
-   rimanente e il prossimo intervallo.
+2. La **target card** mostra l'intervallo corrente, la potenza target, la
+   **cadenza target**, il tempo rimanente e il prossimo intervallo.
 3. Il grafico passa al **profilo target completo**; la linea arancione è la
    potenza reale recente e il marker verticale indica il punto attuale.
 4. **Pausa** ferma il cronometro e la registrazione; **Riprendi** riparte dallo

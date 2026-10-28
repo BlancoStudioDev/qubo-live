@@ -1016,6 +1016,8 @@ class WorkoutIntervalRequest(BaseModel):
     label: str = ""
     duration_s: int = Field(ge=5, le=10800)
     power_w: int = Field(ge=0, le=4000)
+    cadence_min: int | None = Field(default=None, ge=20, le=250)
+    cadence_max: int | None = Field(default=None, ge=20, le=250)
 
 
 class WorkoutRequest(BaseModel):

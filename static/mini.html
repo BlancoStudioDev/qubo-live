@@ -321,6 +321,17 @@
     }
   }, { passive: false });
 
+  function cadenceRange(interval) {
+    if (!interval) return "";
+    const min = Number(interval.cadence_min);
+    const max = Number(interval.cadence_max);
+    if (!Number.isFinite(min) || min <= 0) return "";
+    if (!Number.isFinite(max) || max <= 0) return `${Math.round(min)} rpm`;
+    return min === max
+      ? `${Math.round(min)} rpm`
+      : `${Math.round(min)}-${Math.round(max)} rpm`;
+  }
+
   function setStatus(status) {
     const connected = status === "connected" || status === "simulating";
     $("miniDot").classList.toggle("live", connected);
@@ -364,10 +375,11 @@
         ? `Target ${Math.round(workout.target_power)} W`
         : "Workout completato";
       const label = current.label ? ` · ${current.label}` : "";
+      const cadence = cadenceRange(current);
       const remaining = workout.status === "completed"
         ? ""
         : ` · ${fmtDuration(workout.remaining_s)} rimanenti`;
-      targetText = `${target}${label}${remaining}`;
+      targetText = `${target}${label}${cadence ? ` · ${cadence}` : ""}${remaining}`;
     }
     $("miniTarget").textContent = targetText;
     $("miniTarget2").textContent = targetText;
