@@ -218,22 +218,42 @@ La stessa fascia cardio alimenta una dashboard separata: apri
 <http://127.0.0.1:8130/sonno> dal link **Sonno** in alto nella dashboard
 principale. Non è un'attività Strava e non genera TCX.
 
-- **Avvia tracciamento** quando vai a letto e **Concludi notte** quando ti
-  svegli. La fascia deve essere già connessa dalla dashboard principale.
-- La pagina mostra battito in tempo reale, media, minimo, battito a riposo,
-  copertura dei campioni e un grafico della notte.
-- Al termine calcola un indicatore 0-100 e alcuni consigli su durata,
-  regolarità, battito a riposo e copertura. È una stima basata sul battito,
-  non una diagnosi del sonno.
-- Puoi aggiungere qualità percepita e note libere (cena, caffeina, alcol,
-  stress, temperatura della stanza).
-- I dati restano in `data/sleep_sessions` come JSON e CSV. Non vengono
-  caricati su Strava e non entrano nell'elenco delle attività del rullo.
+Puoi usare la dashboard in due modi:
+
+- **Automatico (consigliato)**: avvia il server con `--hr-only` (o `--auto`) e
+  lascia la fascia indossata. Tra le 21:00 e le 09:00, se il battito resta
+  basso e stabile per almeno 18-30 minuti, il sistema apre la notte da solo e
+  recupera i campioni già registrati. Al risveglio, quando il battito risale
+  in modo netto per almeno 2,5 minuti, chiude e salva la notte. Il toggle
+  **Auto** nella dashboard è attivo per impostazione predefinita.
+- **Manuale**: premi **Avvia tracciamento** quando vai a letto e **Concludi
+  notte** quando ti svegli. La fascia deve essere già connessa.
+
+La pagina mostra battito in tempo reale, media, minimo, battito a riposo,
+copertura dei campioni, un grafico della notte e le fasi stimate
+(leggero/profondo/REM/veglia) calcolate da HR e HRV. Al termine calcola un
+indicatore 0-100 e alcuni consigli. È una stima, non una diagnosi del sonno.
+Puoi aggiungere qualità percepita e note libere (cena, caffeina, alcol, stress,
+temperatura della stanza). I dati restano in `data/sleep_sessions` come JSON e
+CSV: non vengono caricati su Strava e non entrano nell'elenco delle attività
+del rullo.
 
 Mentre il tracciamento è attivo il server avvia `caffeinate` su macOS per
 evitare lo stop per inattività. Tieni comunque il Mac collegato e il coperchio
-aperto: la chiusura del coperchio può sospendere il sistema e interrompere la
-fascia.
+aperto: la chiusura del coperchio o uno standby vero spengono il Bluetooth e
+interrompono la registrazione. La fascia H6 non ha memoria interna, quindi i
+dati non vengono recuperati dopo una sospensione. Per una registrazione
+affidabile anche a coperchio chiuso serve un host sempre acceso (es. Raspberry
+Pi) vicino al letto.
+
+Comandi utili:
+
+```bash
+# Solo fascia cardio, senza rullo, con connessione automatica all'avvio
+.venv/bin/python server.py --hr-only
+```
+
+Dashboard: <http://127.0.0.1:8130/sonno>.
 
 API principali:
 

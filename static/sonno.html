@@ -162,7 +162,10 @@
   .kpi { background: var(--surface-2); border: 1px solid var(--line-soft); border-radius: 12px; padding: 10px 11px; }
   .kpi span { display: block; color: var(--muted); font-size: 10px; font-weight: 700; letter-spacing: .08em; text-transform: uppercase; }
   .kpi b { display: block; margin-top: 4px; font-family: var(--font-data); font-size: 17px; font-weight: 500; }
-  .actions { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 14px; }
+  .actions { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 14px; align-items: center; }
+  .auto-toggle { display: inline-flex; gap: 7px; align-items: center; margin-left: auto; font-size: 12px; color: var(--muted); cursor: pointer; user-select: none; }
+  .auto-toggle input { accent-color: var(--accent); width: 16px; height: 16px; }
+  .auto-toggle.active { color: var(--accent); }
   .sleep-form { display: grid; grid-template-columns: minmax(140px, .45fr) minmax(0, 1fr); gap: 10px; margin-top: 12px; }
   .field { display: grid; gap: 5px; }
   .field label { color: var(--muted); font-size: 11px; font-weight: 600; }
@@ -190,6 +193,20 @@
   .tips li { position: relative; padding-left: 15px; color: var(--muted); font-size: 12px; line-height: 1.35; }
   .tips li::before { content: ""; position: absolute; left: 0; top: 6px; width: 5px; height: 5px; border-radius: 50%; background: var(--hr); }
   .tips li:last-child { color: var(--muted-2); font-size: 11px; }
+  .stage-breakdown { margin-top: 14px; border-top: 1px solid var(--line-soft); padding-top: 12px; }
+  .stage-head { display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px; }
+  .stage-head span { font-size: 12px; color: var(--text); font-weight: 500; }
+  .stage-head small { color: var(--muted); font-size: 10px; }
+  .stage-list { display: grid; gap: 5px; }
+  .stage-row { display: flex; align-items: center; gap: 8px; font-size: 11px; color: var(--muted); }
+  .stage-name { min-width: 58px; }
+  .stage-bar { flex: 1; height: 7px; background: var(--surface-3); border-radius: 4px; overflow: hidden; }
+  .stage-bar span { display: block; height: 100%; border-radius: 4px; background: var(--accent); }
+  .stage-time { font-family: var(--font-data); min-width: 42px; text-align: right; color: var(--text); }
+  .stage-row.deep .stage-bar span { background: #5b8def; }
+  .stage-row.rem .stage-bar span { background: #b07cf4; }
+  .stage-row.light .stage-bar span { background: #6dc7a4; }
+  .stage-row.awake .stage-bar span { background: #e9b45f; }
 
   .card-head { display: flex; justify-content: space-between; gap: 12px; align-items: flex-start; margin-bottom: 10px; }
   h2 { margin: 0; font-size: 15px; font-weight: 650; letter-spacing: .01em; }
@@ -276,6 +293,7 @@
           <span>durata <b id="currentElapsed">--</b></span>
           <span>campioni <b id="currentSamples">--</b></span>
           <span>fascia <b id="hrDevice">non connessa</b></span>
+          <span>HRV <b id="currentHrv">--</b></span>
         </div>
         <div class="kpis">
           <div class="kpi"><span>medio</span><b id="currentAvg">--</b></div>
@@ -286,6 +304,10 @@
         <div class="actions">
           <button class="btn primary" id="btnStartSleep" type="button" disabled>Avvia tracciamento</button>
           <button class="btn ghost danger" id="btnStopSleep" type="button" disabled>Concludi notte</button>
+          <label class="auto-toggle" title="Avvia e chiudi la notte automaticamente in base al battito">
+            <input type="checkbox" id="autoSleepToggle">
+            <span>Auto</span>
+          </label>
         </div>
         <div class="sleep-form">
           <div class="field">
@@ -316,6 +338,11 @@
             <div><span>battito medio</span><b id="detailAvg">--</b></div>
             <div><span>a riposo</span><b id="detailResting">--</b></div>
             <div><span>copertura</span><b id="detailCoverage">--</b></div>
+            <div><span>HRV (RMSSD)</span><b id="detailHrv">--</b></div>
+          </div>
+          <div class="stage-breakdown" id="stageBreakdown">
+            <div class="stage-head"><span>Fasi stimate</span><small>euristica da HR e HRV</small></div>
+            <div class="stage-list" id="stageList"></div>
           </div>
           <ul class="tips" id="detailTips"><li>Nessuna notte salvata. Avvia il tracciamento per creare il primo diario.</li></ul>
         </div>
@@ -645,6 +672,31 @@
     }
   }
 
+  function renderStages(item) {
+    const container = $("stageList");
+    if (!container) return;
+    const stages = item.stage_minutes;
+    if (!stages || typeof stages !== "object" || !Object.keys(stages).length) {
+      container.innerHTML = '<div class="stage-row">Dati sulle fasi non disponibili.</div>';
+      return;
+    }
+    const stageOrder = ["awake", "rem", "light", "deep"];
+    const stageNames = { awake: "Veglia", rem: "REM", light: "Leggero", deep: "Profondo" };
+    const total = Object.values(stages).reduce((sum, value) => sum + Number(value || 0), 0) || 1;
+    container.innerHTML = stageOrder.map((key) => {
+      const minutes = Number(stages[key]) || 0;
+      const pct = Math.round((minutes / total) * 100);
+      const timeStr = minutes >= 60
+        ? Math.floor(minutes / 60) + "h " + Math.round(minutes % 60) + "m"
+        : Math.round(minutes) + "m";
+      return '<div class="stage-row ' + key + '">' +
+        '<span class="stage-name">' + stageNames[key] + '</span>' +
+        '<div class="stage-bar"><span style="width:' + pct + '%"></span></div>' +
+        '<span class="stage-time">' + timeStr + '</span>' +
+      '</div>';
+    }).join("");
+  }
+
   function renderDetail() {
     const item = state.detail || state.last;
     const isDetail = Boolean(state.detail);
@@ -658,6 +710,8 @@
       $("detailAvg").textContent = "--";
       $("detailResting").textContent = "--";
       $("detailCoverage").textContent = "--";
+      $("detailHrv").textContent = "--";
+      if ($("stageList")) $("stageList").innerHTML = "";
       $("detailTips").innerHTML = "<li>Nessuna notte salvata. Avvia il tracciamento per creare il primo diario.</li>";
       $("detailNotes").textContent = "";
       $("chartLabel").textContent = "-";
@@ -671,6 +725,8 @@
     $("detailAvg").textContent = item.avg_heart_rate_bpm ? Math.round(item.avg_heart_rate_bpm) + " bpm" : "--";
     $("detailResting").textContent = item.resting_heart_rate_bpm ? Math.round(item.resting_heart_rate_bpm) + " bpm" : "--";
     $("detailCoverage").textContent = item.coverage_pct ? Math.round(item.coverage_pct) + "%" : "--";
+    $("detailHrv").textContent = item.rr_rmssd_ms ? Math.round(item.rr_rmssd_ms) + " ms" : "--";
+    renderStages(item);
     const tips = item.tips && item.tips.length ? item.tips : ["Nessun consiglio specifico per questa notte."];
     $("detailTips").innerHTML = tips.map((tip) => "<li>" + escapeHtml(tip) + "</li>").join("");
     const notes = [];
@@ -751,6 +807,15 @@
       state.last = sleep.last || null;
       state.hr = sleep.hr || { connected: false, status: "idle", device: null };
       state.heartRate = Number(sleep.heart_rate_bpm) || 0;
+      state.auto = Boolean(sleep.auto);
+      const autoToggle = $("autoSleepToggle");
+      if (autoToggle) {
+        autoToggle.checked = state.auto;
+        const label = autoToggle.closest(".auto-toggle");
+        if (label) {
+          label.classList.toggle("active", state.auto);
+        }
+      }
       const sessions = await api("/api/sleep/sessions");
       state.sessions = sessions.sessions || [];
       if (state.active) {
@@ -825,10 +890,31 @@
     render();
   }
 
+  async function toggleAutoSleep() {
+    const toggle = $("autoSleepToggle");
+    if (!toggle) return;
+    const enabled = toggle.checked;
+    try {
+      const response = await api("/api/sleep/auto", {
+        method: "POST",
+        body: JSON.stringify({ enabled }),
+      });
+      state.auto = Boolean(response.auto);
+      toast(response.auto ? "Auto sonno attivo." : "Auto sonno disattivo.");
+      const label = toggle.closest(".auto-toggle");
+      if (label) label.classList.toggle("active", state.auto);
+    } catch (error) {
+      toggle.checked = !enabled;
+      toast(error.message, "error");
+    }
+  }
+
   $("btnStartSleep").addEventListener("click", startSleep);
   $("btnStopSleep").addEventListener("click", stopSleep);
   $("btnRefresh").addEventListener("click", refresh);
   $("btnTheme").addEventListener("click", toggleTheme);
+  const autoSleepToggle = $("autoSleepToggle");
+  if (autoSleepToggle) autoSleepToggle.addEventListener("change", toggleAutoSleep);
   window.addEventListener("resize", () => {
     renderCurrent();
     renderDetail();

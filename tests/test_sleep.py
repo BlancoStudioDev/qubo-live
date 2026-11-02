@@ -7,7 +7,7 @@ from unittest import mock
 
 import server
 from session import Metrics
-from sleep import SleepRecorder, list_sleep_sessions, load_sleep_session
+from sleep import SleepAutoDetector, SleepRecorder, list_sleep_sessions, load_sleep_session
 
 
 class SleepRecorderTests(unittest.TestCase):
@@ -153,6 +153,97 @@ class SleepManagerTests(unittest.TestCase):
         self.assertIn("series", state["current"])
         self.assertGreater(len(state["current"]["series"]), 0)
         self.assertTrue(state["hr"]["connected"])
+
+
+class SleepAutoDetectorTests(unittest.TestCase):
+    def setUp(self):
+        self.temp = tempfile.TemporaryDirectory()
+        self.addCleanup(self.temp.cleanup)
+        self.data_dir = Path(self.temp.name) / "sleep_sessions"
+        self.detector = SleepAutoDetector(
+            self.data_dir,
+            window_start=21,
+            window_end=9,
+            onset_minutes=2,
+            wake_minutes=1,
+            min_sleep_minutes=2,
+        )
+
+    def _window(self, now, minutes, hr, step_s=0.5):
+        start = now.timestamp() - minutes * 60.0
+        count = max(1, int(minutes * 60 / step_s))
+        return [
+            {
+                "t": start + index * step_s,
+                "h": float(hr),
+                "rr": 0.0,
+            }
+            for index in range(count)
+        ]
+
+    def test_auto_start_sleep(self):
+        now = datetime(2026, 11, 3, 23, 0, 0)
+        window = self._window(now, 2.5, 50.0)
+        decision = self.detector.evaluate(
+            window, sleep_active=False, now=now
+        )
+        self.assertIsNotNone(decision)
+        self.assertEqual(decision["action"], "start")
+        self.assertIn("started_at", decision)
+
+    def test_auto_start_requires_window(self):
+        now = datetime(2026, 11, 3, 15, 0, 0)
+        window = self._window(now, 2.5, 50.0)
+        decision = self.detector.evaluate(
+            window, sleep_active=False, now=now
+        )
+        self.assertIsNone(decision)
+
+    def test_auto_stop_sleep(self):
+        now = datetime(2026, 11, 4, 7, 0, 0)
+        window = self._window(now, 1.0, 80.0)
+        decision = self.detector.evaluate(
+            window,
+            sleep_active=True,
+            session_stats={"duration_s": 8 * 3600, "avg_heart_rate_bpm": 55.0},
+            now=now,
+        )
+        self.assertIsNotNone(decision)
+        self.assertEqual(decision["action"], "stop")
+
+    def test_auto_stop_works_outside_window(self):
+        now = datetime(2026, 11, 4, 10, 0, 0)
+        window = self._window(now, 1.0, 80.0)
+        decision = self.detector.evaluate(
+            window,
+            sleep_active=True,
+            session_stats={"duration_s": 8 * 3600, "avg_heart_rate_bpm": 55.0},
+            now=now,
+        )
+        self.assertIsNotNone(decision)
+        self.assertEqual(decision["action"], "stop")
+
+    def test_auto_stop_requires_minimum_duration(self):
+        now = datetime(2026, 11, 4, 7, 0, 0)
+        window = self._window(now, 1.0, 80.0)
+        decision = self.detector.evaluate(
+            window,
+            sleep_active=True,
+            session_stats={"duration_s": 60.0, "avg_heart_rate_bpm": 55.0},
+            now=now,
+        )
+        self.assertIsNone(decision)
+
+    def test_auto_start_ignores_unstable_hr(self):
+        now = datetime(2026, 11, 3, 23, 0, 0)
+        window = []
+        for index in range(5):
+            window.append({"t": now.timestamp() - 120 + index * 30, "h": 45.0})
+            window.append({"t": now.timestamp() - 115 + index * 30, "h": 75.0})
+        decision = self.detector.evaluate(
+            window, sleep_active=False, now=now
+        )
+        self.assertIsNone(decision)
 
 
 if __name__ == "__main__":

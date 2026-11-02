@@ -24,6 +24,7 @@ import sys
 import time
 from collections import deque
 from contextlib import asynccontextmanager
+from datetime import datetime
 from pathlib import Path
 
 from fastapi import FastAPI, HTTPException, WebSocket, WebSocketDisconnect
@@ -54,6 +55,7 @@ from session import (  # noqa: E402
 )
 from plan import render_plan_page  # noqa: E402
 from sleep import (  # noqa: E402
+    SleepAutoDetector,
     SleepRecorder,
     list_sleep_sessions,
     load_sleep_session,
@@ -105,10 +107,12 @@ class Manager:
         *,
         simulate: bool = False,
         scan_time: float = 6.0,
+        hr_only: bool = False,
     ) -> None:
         self.data_dir = SIM_DATA_DIR if simulate else DATA_DIR
         self.sleep_dir = SIM_SLEEP_DATA_DIR if simulate else SLEEP_DATA_DIR
         self.simulate = simulate
+        self.hr_only = hr_only
         self.session_source = "sim" if simulate else "trainer"
         self.scan_time = scan_time
 
@@ -124,6 +128,9 @@ class Manager:
             # correction at 25 km/h (about 10%) and is configurable.
             "power_offset_w": float(config.get("power_offset_w", 30.0)),
             "speed_offset_kmh": float(config.get("speed_offset_kmh", 2.5)),
+            "sleep_auto": bool(config.get("sleep_auto", True)),
+            "sleep_window_start": int(config.get("sleep_window_start", 21)),
+            "sleep_window_end": int(config.get("sleep_window_end", 9)),
         }
 
         self.status = "idle"
@@ -170,6 +177,16 @@ class Manager:
         self.last_sleep: dict[str, object] | None = (
             list_sleep_sessions(self.sleep_dir, limit=1) or [None]
         )[0]
+        self.sleep_auto = bool(self.config.get("sleep_auto", True))
+        self.auto_detector = SleepAutoDetector(
+            self.sleep_dir,
+            window_start=int(self.config.get("sleep_window_start", 21)),
+            window_end=int(self.config.get("sleep_window_end", 9)),
+        )
+        self.hr_window: deque[dict[str, object]] = deque(maxlen=7200)
+        self.latest_rr_ms = 0.0
+        self.latest_rr_at = 0.0
+        self._last_auto_check = 0.0
         self._caffeinate: subprocess.Popen[bytes] | None = None
         self._sim_task: asyncio.Task | None = None
         self._tick_task: asyncio.Task | None = None
@@ -255,6 +272,8 @@ class Manager:
             self.last_sleep = last
         return {
             "active": self.sleep_active,
+            "auto": self.sleep_auto,
+            "state": "sleep" if self.sleep_active else "awake",
             "current": current,
             "last": last,
             "heart_rate_bpm": round(self.effective_metrics().heart_rate_bpm, 1),
@@ -265,15 +284,34 @@ class Manager:
             },
         }
 
-    def start_sleep(self) -> dict[str, object]:
+    def start_sleep(
+        self,
+        *,
+        started_at: datetime | None = None,
+        backfill: list[dict[str, object]] | None = None,
+    ) -> dict[str, object]:
         if self.sleep_active:
             raise ValueError("tracciamento sonno già attivo")
         if self.session_active or self.active_workout is not None:
             raise ValueError("concludi prima l'allenamento")
         if self.hr_status != "connected" and not self.simulate:
             raise ValueError("collega la fascia cardio prima di iniziare")
-        self.sleep_recorder = SleepRecorder(self.sleep_dir)
+        self.sleep_recorder = SleepRecorder(self.sleep_dir, started_at=started_at)
         self.sleep_active = True
+        if backfill:
+            for sample in backfill:
+                heart_rate = float(sample.get("h") or 0)
+                moment = float(sample.get("t") or 0)
+                if heart_rate <= 0 or moment <= 0:
+                    continue
+                self.sleep_recorder.add(
+                    Metrics(heart_rate_bpm=heart_rate),
+                    elapsed_s=max(0.0, moment - self.sleep_recorder.start_epoch),
+                    timestamp=datetime.fromtimestamp(moment).isoformat(
+                        timespec="seconds"
+                    ),
+                    rr_ms=float(sample.get("rr") or 0) or None,
+                )
         self._keep_awake_start()
         return self.sleep_snapshot()
 
@@ -294,6 +332,12 @@ class Manager:
         state = self.sleep_snapshot()
         state["stopped_sleep"] = summary
         return state
+
+    def set_sleep_auto(self, enabled: bool) -> dict[str, object]:
+        self.sleep_auto = bool(enabled)
+        self.config["sleep_auto"] = bool(enabled)
+        self.save_config()
+        return self.sleep_snapshot()
 
     def _finalize_current_session(self) -> dict[str, object] | None:
         """Write the open session to disk, if it has enough data."""
@@ -430,8 +474,15 @@ class Manager:
             self.control["actual_resistance"] = round(
                 float(values["resistance_level"]), 1
             )
+        if "rr_interval_ms" in values:
+            numeric_rr = float(values["rr_interval_ms"])
+            if numeric_rr > 0:
+                self.latest_rr_ms = numeric_rr
+                self.latest_rr_at = now
         applied = False
         for key, value in values.items():
+            if key == "rr_interval_ms":
+                continue
             if key not in self.PLAUSIBLE_RANGES or not hasattr(self.latest, key):
                 continue
 
@@ -590,10 +641,66 @@ class Manager:
                 continue
             metrics = self.effective_metrics()
             self._record_sample(metrics)
-            if self.sleep_active and self.sleep_recorder is not None:
-                self.sleep_recorder.add(metrics)
+            now = time.time()
+            mono = time.monotonic()
+            rr_ms = (
+                self.latest_rr_ms
+                if self.latest_rr_at > 0 and mono - self.latest_rr_at <= 10.0
+                else 0.0
+            )
+            self.hr_window.append(
+                {
+                    "t": now,
+                    "h": round(metrics.heart_rate_bpm, 1),
+                    "rr": round(rr_ms, 1),
+                }
+            )
+            just_started = False
+            if self.sleep_auto and mono - self._last_auto_check >= 30.0:
+                self._last_auto_check = mono
+                if not self.sleep_active:
+                    if not self.session_active and self.active_workout is None:
+                        decision = self.auto_detector.evaluate(
+                            list(self.hr_window), sleep_active=False
+                        )
+                        if decision and decision.get("action") == "start":
+                            started_at = decision.get("started_at")
+                            if isinstance(started_at, datetime):
+                                backfill = [
+                                    sample
+                                    for sample in self.hr_window
+                                    if float(sample.get("t") or 0)
+                                    >= started_at.timestamp()
+                                ]
+                                try:
+                                    self.start_sleep(
+                                        started_at=started_at, backfill=backfill
+                                    )
+                                    just_started = True
+                                except ValueError:
+                                    pass
+                elif self.sleep_recorder is not None:
+                    stats = self.sleep_recorder.stats()
+                    decision = self.auto_detector.evaluate(
+                        list(self.hr_window),
+                        sleep_active=True,
+                        session_stats=stats,
+                    )
+                    if decision and decision.get("action") == "stop":
+                        try:
+                            self.stop_sleep(
+                                quality=None, notes="Rilevamento automatico"
+                            )
+                        except ValueError:
+                            pass
+            if (
+                self.sleep_active
+                and self.sleep_recorder is not None
+                and not just_started
+            ):
+                self.sleep_recorder.add(metrics, rr_ms=rr_ms or None)
             point: dict[str, object] = {
-                "t": int(time.time()),
+                "t": int(now),
                 "p": round(metrics.power_w, 1),
                 "s": round(metrics.speed_kmh, 1),
                 "c": round(metrics.cadence_rpm, 1),
@@ -666,7 +773,10 @@ class Manager:
                 if d.get("kind") != "heart_rate" and int(d.get("score", 0)) > 0
             ]
         heart_rates = [d for d in devices if d.get("kind") == "heart_rate"]
-        if trainers:
+        if self.hr_only:
+            self.status = "idle"
+            self.status_detail = "modalità solo fascia cardio"
+        elif trainers:
             await self.connect(str(trainers[0]["address"]))
         else:
             self.status = "idle"
@@ -1218,8 +1328,16 @@ class SleepStopRequest(BaseModel):
     notes: str | None = Field(default=None, max_length=2000)
 
 
+class SleepAutoRequest(BaseModel):
+    enabled: bool
+
+
 def create_app(args: argparse.Namespace) -> FastAPI:
-    manager = Manager(simulate=args.simulate, scan_time=args.scan_time)
+    manager = Manager(
+        simulate=args.simulate,
+        scan_time=args.scan_time,
+        hr_only=getattr(args, "hr_only", False),
+    )
 
     @asynccontextmanager
     async def lifespan(_app: FastAPI):
@@ -1228,7 +1346,7 @@ def create_app(args: argparse.Namespace) -> FastAPI:
             manager.start_simulation()
         elif args.address:
             asyncio.create_task(manager.connect(args.address))
-        elif args.auto:
+        elif args.auto or getattr(args, "hr_only", False):
             asyncio.create_task(manager.autoconnect())
         yield
         await manager.shutdown()
@@ -1274,6 +1392,13 @@ def create_app(args: argparse.Namespace) -> FastAPI:
     @app.get("/api/sleep/state")
     def sleep_state() -> dict[str, object]:
         return manager.sleep_snapshot()
+
+    @app.post("/api/sleep/auto")
+    def sleep_auto(payload: SleepAutoRequest) -> dict[str, object]:
+        try:
+            return manager.set_sleep_auto(payload.enabled)
+        except ValueError as exc:
+            raise HTTPException(status_code=409, detail=str(exc)) from exc
 
     @app.post("/api/sleep/start")
     def sleep_start() -> dict[str, object]:
@@ -1567,6 +1692,11 @@ def parse_args() -> argparse.Namespace:
     )
     parser.add_argument("--scan-time", type=float, default=6.0)
     parser.add_argument("--log-level", default="info")
+    parser.add_argument(
+        "--hr-only",
+        action="store_true",
+        help="connetti solo la fascia cardio, senza rullo",
+    )
     return parser.parse_args()
 
 
