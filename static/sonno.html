@@ -1,0 +1,843 @@
+<!doctype html>
+<html lang="it" data-theme="dark">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Qubo Live · sonno</title>
+<meta name="description" content="Diario locale del sonno basato sulla fascia cardio: battito, regolarità e consigli. I dati non vengono caricati su Strava.">
+<meta name="theme-color" content="#0a0e10" id="metaTheme">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='14' fill='%23ff5a1f'/%3E%3Ctext x='32' y='45' font-family='monospace' font-size='36' font-weight='700' text-anchor='middle' fill='%231a0c05'%3EQ%3C/text%3E%3C/svg%3E">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Outfit:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<script>
+  (function () {
+    var stored = null;
+    try { stored = localStorage.getItem("qubo-theme"); } catch (err) { /* storage opzionale */ }
+    var theme = stored === "light" || stored === "dark"
+      ? stored
+      : (window.matchMedia && window.matchMedia("(prefers-color-scheme: light)").matches ? "light" : "dark");
+    document.documentElement.dataset.theme = theme;
+  })();
+</script>
+<style>
+  :root {
+    --font-ui: "Outfit", ui-sans-serif, -apple-system, "Segoe UI", Roboto, sans-serif;
+    --font-data: "JetBrains Mono", ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+    --radius: 18px;
+    --hr: #ff7a9c;
+  }
+
+  :root[data-theme="dark"] {
+    color-scheme: dark;
+    --bg: #0a0e10;
+    --surface: #11171a;
+    --surface-2: #0d1215;
+    --surface-3: #182125;
+    --field: #0a0f11;
+    --line: #242f33;
+    --line-soft: #1a2327;
+    --text: #eef4f2;
+    --muted: #8fa1a3;
+    --muted-2: #5f7275;
+    --power: #ff5a1f;
+    --speed: #38d6d6;
+    --cadence: #c9f24d;
+    --warn: #ffd166;
+    --danger: #ff5d5d;
+    --focus: #c9f24d;
+    --shadow-card: 0 22px 48px -36px rgba(0, 0, 0, .9);
+    --grid: #223034;
+    --glow-a: rgba(255, 90, 31, .08);
+    --glow-b: rgba(56, 214, 214, .05);
+  }
+
+  :root[data-theme="light"] {
+    color-scheme: light;
+    --bg: #edf0ee;
+    --surface: #ffffff;
+    --surface-2: #f6f8f7;
+    --surface-3: #e9eeec;
+    --field: #f2f5f4;
+    --line: #d8e0dc;
+    --line-soft: #e3e9e6;
+    --text: #14201d;
+    --muted: #54655f;
+    --muted-2: #7e8f89;
+    --power: #e0430b;
+    --speed: #0e9aa0;
+    --cadence: #7fae00;
+    --warn: #b7791f;
+    --danger: #d92d20;
+    --focus: #e0430b;
+    --shadow-card: 0 1px 2px rgba(20, 32, 29, .05), 0 18px 44px -32px rgba(20, 32, 29, .28);
+    --grid: #dfe6e2;
+    --glow-a: rgba(224, 67, 11, .07);
+    --glow-b: rgba(14, 154, 160, .06);
+  }
+
+  * { box-sizing: border-box; }
+  html, body { margin: 0; min-height: 100%; }
+  body {
+    background:
+      radial-gradient(900px 520px at 12% -8%, var(--glow-a), transparent 62%),
+      radial-gradient(760px 480px at 92% 8%, var(--glow-b), transparent 60%),
+      var(--bg);
+    color: var(--text);
+    font-family: var(--font-ui);
+    font-size: 15px;
+    line-height: 1.45;
+    -webkit-font-smoothing: antialiased;
+  }
+  a { color: inherit; }
+  button, select, textarea { font: inherit; }
+  button { cursor: pointer; }
+  .hidden { display: none !important; }
+  .app { width: min(1380px, calc(100% - 40px)); margin: 0 auto; padding: 22px 0 54px; }
+  .bar {
+    display: flex; align-items: center; justify-content: space-between; gap: 18px;
+    padding: 4px 2px 20px;
+  }
+  .brand { display: flex; align-items: center; gap: 12px; min-width: 0; }
+  .brand-mark {
+    width: 42px; height: 42px; border-radius: 13px; display: grid; place-items: center;
+    background: linear-gradient(135deg, var(--power), #ffb36b); color: #1a0c05;
+    font-family: var(--font-data); font-weight: 700; font-size: 20px;
+    box-shadow: 0 10px 28px -16px var(--power);
+  }
+  .brand-name { font-size: 15px; font-weight: 700; letter-spacing: .12em; }
+  .brand-sub { color: var(--muted); font-size: 12px; margin-top: 1px; }
+  .bar-actions { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; justify-content: flex-end; }
+  .status {
+    display: inline-flex; align-items: center; gap: 8px; padding: 8px 12px;
+    border: 1px solid var(--line); border-radius: 999px; background: var(--surface-2);
+    color: var(--muted); font-size: 12px; font-weight: 600;
+  }
+  .status .dot { width: 7px; height: 7px; border-radius: 50%; background: var(--muted-2); }
+  .status.ready .dot { background: var(--speed); box-shadow: 0 0 0 4px rgba(56, 214, 214, .12); }
+  .status.live .dot { background: var(--hr); box-shadow: 0 0 0 4px rgba(255, 122, 156, .14); animation: pulse 1.8s infinite; }
+  @keyframes pulse { 50% { opacity: .45; } }
+
+  .btn {
+    display: inline-flex; align-items: center; justify-content: center; gap: 8px;
+    min-height: 38px; padding: 8px 14px; border-radius: 11px;
+    border: 1px solid var(--line); background: var(--surface-3); color: var(--text);
+    font-weight: 600; font-size: 13px; text-decoration: none;
+    transition: transform .15s ease, border-color .15s ease, background .15s ease;
+  }
+  .btn:hover { transform: translateY(-1px); border-color: var(--muted-2); }
+  .btn:disabled { opacity: .42; cursor: not-allowed; transform: none; }
+  .btn.primary { background: var(--power); border-color: transparent; color: #210d05; }
+  .btn.ghost { background: transparent; }
+  .btn.danger { color: var(--danger); border-color: rgba(255, 93, 93, .35); }
+  .btn.tiny { min-height: 30px; padding: 4px 9px; font-size: 11px; border-radius: 8px; }
+  .btn:focus-visible, select:focus-visible, textarea:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }
+
+  main { display: grid; gap: 14px; }
+  .hero-grid { display: grid; grid-template-columns: minmax(0, 1.25fr) minmax(300px, .75fr); gap: 14px; }
+  .grid { display: grid; grid-template-columns: minmax(0, 1.35fr) minmax(280px, .65fr); gap: 14px; }
+  .card {
+    position: relative; overflow: hidden; background: var(--surface);
+    border: 1px solid var(--line-soft); border-radius: var(--radius);
+    padding: 18px; box-shadow: var(--shadow-card);
+  }
+  .card::before {
+    content: ""; position: absolute; inset: 0 0 auto; height: 1px;
+    background: linear-gradient(90deg, transparent, rgba(255,255,255,.12), transparent);
+    pointer-events: none;
+  }
+  .label {
+    display: flex; align-items: center; justify-content: space-between; gap: 10px;
+    color: var(--muted); font-size: 11px; font-weight: 700; letter-spacing: .12em; text-transform: uppercase;
+  }
+  .label b { color: var(--muted-2); font-weight: 600; letter-spacing: .04em; text-transform: none; }
+  .big {
+    display: flex; align-items: baseline; gap: 7px; margin: 14px 0 2px;
+    font-family: var(--font-data); font-size: clamp(52px, 8vw, 88px); line-height: .9; letter-spacing: -.06em;
+  }
+  .big .unit { font-size: 15px; color: var(--muted); letter-spacing: .04em; }
+  .under { display: flex; gap: 14px; flex-wrap: wrap; color: var(--muted); font-size: 12px; }
+  .under b { color: var(--text); font-family: var(--font-data); font-weight: 500; }
+  .kpis { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; margin-top: 16px; }
+  .kpi { background: var(--surface-2); border: 1px solid var(--line-soft); border-radius: 12px; padding: 10px 11px; }
+  .kpi span { display: block; color: var(--muted); font-size: 10px; font-weight: 700; letter-spacing: .08em; text-transform: uppercase; }
+  .kpi b { display: block; margin-top: 4px; font-family: var(--font-data); font-size: 17px; font-weight: 500; }
+  .actions { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 14px; }
+  .sleep-form { display: grid; grid-template-columns: minmax(140px, .45fr) minmax(0, 1fr); gap: 10px; margin-top: 12px; }
+  .field { display: grid; gap: 5px; }
+  .field label { color: var(--muted); font-size: 11px; font-weight: 600; }
+  select, textarea {
+    width: 100%; border: 1px solid var(--line); border-radius: 10px; background: var(--field);
+    color: var(--text); padding: 9px 10px; font-size: 13px;
+  }
+  textarea { min-height: 62px; resize: vertical; }
+  .hint { color: var(--muted); font-size: 12px; margin-top: 10px; }
+  .hint a { color: var(--speed); text-decoration: none; font-weight: 600; }
+  .hint a:hover { text-decoration: underline; }
+
+  .score-wrap { display: flex; align-items: flex-end; gap: 12px; margin: 16px 0 10px; }
+  .score { font-family: var(--font-data); font-size: 64px; line-height: .85; letter-spacing: -.06em; }
+  .score small { font-size: 13px; color: var(--muted); letter-spacing: 0; }
+  .score-label { display: inline-flex; padding: 5px 9px; border-radius: 999px; background: var(--surface-3); color: var(--muted); font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: .08em; }
+  .score-label.good { color: var(--cadence); }
+  .score-label.mid { color: var(--warn); }
+  .score-label.bad { color: var(--danger); }
+  .meta { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; margin: 14px 0; }
+  .meta div { background: var(--surface-2); border: 1px solid var(--line-soft); border-radius: 10px; padding: 8px 10px; }
+  .meta span { display: block; color: var(--muted); font-size: 10px; text-transform: uppercase; letter-spacing: .08em; }
+  .meta b { display: block; margin-top: 2px; font-family: var(--font-data); font-weight: 500; font-size: 14px; }
+  .tips { margin: 0; padding: 0; list-style: none; display: grid; gap: 7px; }
+  .tips li { position: relative; padding-left: 15px; color: var(--muted); font-size: 12px; line-height: 1.35; }
+  .tips li::before { content: ""; position: absolute; left: 0; top: 6px; width: 5px; height: 5px; border-radius: 50%; background: var(--hr); }
+  .tips li:last-child { color: var(--muted-2); font-size: 11px; }
+
+  .card-head { display: flex; justify-content: space-between; gap: 12px; align-items: flex-start; margin-bottom: 10px; }
+  h2 { margin: 0; font-size: 15px; font-weight: 650; letter-spacing: .01em; }
+  .card-head p { margin: 3px 0 0; color: var(--muted); font-size: 11px; }
+  .chart-wrap { position: relative; height: 230px; margin-top: 8px; }
+  .chart-wrap.small { height: 180px; }
+  canvas { display: block; width: 100%; height: 100%; }
+  .empty {
+    position: absolute; inset: 0; display: grid; place-items: center; text-align: center;
+    color: var(--muted-2); font-size: 12px; padding: 20px; border: 1px dashed var(--line);
+    border-radius: 12px; background: linear-gradient(180deg, transparent, var(--surface-2));
+  }
+  .empty.hidden { display: none; }
+
+  .sessions { display: grid; gap: 7px; }
+  .session-row {
+    display: flex; align-items: center; gap: 8px; border: 1px solid var(--line-soft);
+    border-radius: 11px; background: var(--surface-2); padding: 5px 6px 5px 11px;
+  }
+  .session-row.selected { border-color: var(--speed); background: var(--surface-3); }
+  .session-main {
+    flex: 1; display: grid; grid-template-columns: 1.1fr .7fr .7fr .55fr; gap: 8px;
+    align-items: center; text-align: left; border: 0; background: transparent; color: inherit;
+    padding: 6px 0; min-width: 0;
+  }
+  .session-main span { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .session-main .date { font-weight: 600; font-size: 12px; }
+  .session-main .val { font-family: var(--font-data); font-size: 12px; color: var(--muted); }
+  .session-main .score-mini { font-family: var(--font-data); font-size: 12px; color: var(--text); }
+  .session-empty { color: var(--muted-2); font-size: 12px; padding: 12px 2px; }
+  .advice { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px 22px; margin: 0; padding: 0; list-style: none; }
+  .advice li { color: var(--muted); font-size: 12px; line-height: 1.4; padding-left: 16px; position: relative; }
+  .advice li::before { content: ""; position: absolute; left: 0; top: 6px; width: 6px; height: 6px; border-radius: 2px; background: var(--speed); }
+  .footnote { color: var(--muted-2); font-size: 11px; margin-top: 12px; }
+  .toast {
+    position: fixed; right: 18px; bottom: 18px; z-index: 50; max-width: min(420px, calc(100% - 36px));
+    padding: 12px 14px; border-radius: 12px; background: var(--surface-3); border: 1px solid var(--line);
+    box-shadow: var(--shadow-card); color: var(--text); font-size: 13px; transform: translateY(12px); opacity: 0;
+    pointer-events: none; transition: .2s ease;
+  }
+  .toast.show { transform: translateY(0); opacity: 1; }
+  .toast.error { border-color: rgba(255, 93, 93, .45); color: var(--danger); }
+
+  @media (max-width: 980px) {
+    .hero-grid, .grid { grid-template-columns: 1fr; }
+    .big { font-size: 72px; }
+  }
+  @media (max-width: 620px) {
+    .app { width: min(100% - 24px, 1380px); padding-top: 12px; }
+    .bar { align-items: flex-start; flex-direction: column; }
+    .bar-actions { justify-content: flex-start; }
+    .sleep-form { grid-template-columns: 1fr; }
+    .session-main { grid-template-columns: 1.2fr .8fr .8fr; }
+    .session-main .score-mini { display: none; }
+    .advice { grid-template-columns: 1fr; }
+    .kpis { grid-template-columns: 1fr 1fr; }
+  }
+</style>
+</head>
+<body>
+<div class="app">
+  <header class="bar">
+    <div class="brand">
+      <div class="brand-mark">Q</div>
+      <div>
+        <div class="brand-name">QUBO LIVE · SONNO</div>
+        <div class="brand-sub">Diario locale della notte, non un'attività Strava</div>
+      </div>
+    </div>
+    <div class="bar-actions">
+      <div class="status" id="statusPill"><span class="dot"></span><span id="statusText">caricamento</span></div>
+      <a class="btn ghost" href="/">Dashboard</a>
+      <button class="btn ghost" id="btnTheme" type="button">Tema</button>
+      <button class="btn ghost" id="btnRefresh" type="button">Aggiorna</button>
+    </div>
+  </header>
+
+  <main>
+    <section class="hero-grid">
+      <article class="card">
+        <div class="label"><span>Notte in corso</span><b id="currentState">in attesa</b></div>
+        <div class="big"><span id="currentHr">--</span><span class="unit">bpm</span></div>
+        <div class="under">
+          <span>durata <b id="currentElapsed">--</b></span>
+          <span>campioni <b id="currentSamples">--</b></span>
+          <span>fascia <b id="hrDevice">non connessa</b></span>
+        </div>
+        <div class="kpis">
+          <div class="kpi"><span>medio</span><b id="currentAvg">--</b></div>
+          <div class="kpi"><span>minimo</span><b id="currentMin">--</b></div>
+          <div class="kpi"><span>a riposo</span><b id="currentResting">--</b></div>
+        </div>
+        <div class="chart-wrap"><canvas id="liveChart"></canvas><div class="empty" id="liveEmpty">Avvia il tracciamento quando vai a letto</div></div>
+        <div class="actions">
+          <button class="btn primary" id="btnStartSleep" type="button" disabled>Avvia tracciamento</button>
+          <button class="btn ghost danger" id="btnStopSleep" type="button" disabled>Concludi notte</button>
+        </div>
+        <div class="sleep-form">
+          <div class="field">
+            <label for="sleepQuality">Qualità percepita</label>
+            <select id="sleepQuality">
+              <option value="">non indicata</option>
+              <option value="1">1 · pessima</option>
+              <option value="2">2 · scarsa</option>
+              <option value="3">3 · media</option>
+              <option value="4">4 · buona</option>
+              <option value="5">5 · ottima</option>
+            </select>
+          </div>
+          <div class="field">
+            <label for="sleepNotes">Note della notte</label>
+            <textarea id="sleepNotes" maxlength="2000" placeholder="cena, caffeina, alcol, stress, temperatura della stanza..."></textarea>
+          </div>
+        </div>
+        <p class="hint" id="hrHint">La fascia va collegata dalla dashboard principale. Tieni il Mac collegato e impedisci lo stop durante la notte.</p>
+      </article>
+
+      <article class="card">
+        <div class="label"><span id="detailTitle">Ultima notte</span><b id="detailDate">-</b></div>
+        <div id="detailBody">
+          <div class="score-wrap"><div class="score" id="detailScore">--</div><span class="score-label" id="detailLabel">nessun dato</span></div>
+          <div class="meta">
+            <div><span>durata</span><b id="detailDuration">--</b></div>
+            <div><span>battito medio</span><b id="detailAvg">--</b></div>
+            <div><span>a riposo</span><b id="detailResting">--</b></div>
+            <div><span>copertura</span><b id="detailCoverage">--</b></div>
+          </div>
+          <ul class="tips" id="detailTips"><li>Nessuna notte salvata. Avvia il tracciamento per creare il primo diario.</li></ul>
+        </div>
+        <p class="footnote" id="detailNotes"></p>
+      </article>
+    </section>
+
+    <section class="grid">
+      <article class="card">
+        <div class="card-head">
+          <div><h2>Andamento del battito</h2><p id="chartHint">La notte selezionata, campionata ogni 30 secondi</p></div>
+          <span class="score-label" id="chartLabel">-</span>
+        </div>
+        <div class="chart-wrap"><canvas id="sleepChart"></canvas><div class="empty" id="chartEmpty">Nessun dato disponibile</div></div>
+      </article>
+
+      <article class="card">
+        <div class="card-head"><div><h2>Tendenza recente</h2><p>Battito a riposo delle ultime 7 notti</p></div></div>
+        <div class="chart-wrap small"><canvas id="trendChart"></canvas><div class="empty" id="trendEmpty">Servono almeno due notti</div></div>
+      </article>
+    </section>
+
+    <section class="card">
+      <div class="card-head"><div><h2>Notti salvate</h2><p>Dati locali in data/sleep_sessions, nessun upload su Strava</p></div></div>
+      <div class="sessions" id="sessionsList"><div class="session-empty">Nessuna notte salvata.</div></div>
+    </section>
+
+    <section class="card">
+      <div class="card-head"><div><h2>Come migliorare</h2><p>Routine e ambiente contano più di un singolo dato</p></div></div>
+      <ul class="advice">
+        <li>Mantieni orari regolari, anche nel weekend: il corpo lavora meglio con una finestra sonno stabile.</li>
+        <li>Tieni la camera fresca, buia e silenziosa. Una temperatura troppo alta alza il battito.</li>
+        <li>Evita caffeina nelle 8 ore prima di dormire e limita l'alcol la sera.</li>
+        <li>Chiudi gli schermi 30 minuti prima e abbassa le luci.</li>
+        <li>Non allenarti forte nelle 2-3 ore prima del sonno, soprattutto se il battito resta alto.</li>
+        <li>Se il sonno è disturbato per settimane, parla con un medico. Questa dashboard non è un esame clinico.</li>
+      </ul>
+    </section>
+  </main>
+</div>
+<div class="toast" id="toast" role="status" aria-live="polite"></div>
+
+<script>
+(() => {
+  const $ = (id) => document.getElementById(id);
+  const state = {
+    active: false,
+    current: null,
+    last: null,
+    detail: null,
+    sessions: [],
+    selectedId: null,
+    hr: { connected: false, status: "idle", device: null },
+    heartRate: 0,
+    loading: false,
+  };
+  let toastTimer = null;
+
+  function toast(message, kind = "") {
+    const el = $("toast");
+    el.textContent = message;
+    el.className = "toast show " + kind;
+    clearTimeout(toastTimer);
+    toastTimer = setTimeout(() => { el.className = "toast " + kind; }, 4200);
+  }
+
+  async function api(path, options = {}) {
+    const response = await fetch(path, {
+      headers: { "Content-Type": "application/json" },
+      ...options,
+    });
+    const data = await response.json().catch(() => ({}));
+    if (!response.ok) throw new Error(data.detail || "Errore " + response.status);
+    return data;
+  }
+
+  function formatDuration(seconds) {
+    const total = Math.max(0, Math.round(Number(seconds) || 0));
+    if (total < 60) return "0 min";
+    const hours = Math.floor(total / 3600);
+    const minutes = Math.round((total % 3600) / 60);
+    if (!hours) return minutes + " min";
+    return hours + "h " + String(minutes).padStart(2, "0") + "m";
+  }
+
+  function formatClock(seconds) {
+    const total = Math.max(0, Math.round(Number(seconds) || 0));
+    const hours = Math.floor(total / 3600);
+    const minutes = Math.floor((total % 3600) / 60);
+    return String(hours).padStart(2, "0") + ":" + String(minutes).padStart(2, "0");
+  }
+
+  function formatDate(iso) {
+    if (!iso) return "-";
+    const date = new Date(iso);
+    if (Number.isNaN(date.getTime())) return String(iso).slice(0, 10);
+    return date.toLocaleDateString("it-IT", { weekday: "short", day: "2-digit", month: "short" });
+  }
+
+  function formatDateShort(iso) {
+    if (!iso) return "-";
+    const date = new Date(iso);
+    if (Number.isNaN(date.getTime())) return String(iso).slice(5, 10);
+    return String(date.getDate()).padStart(2, "0") + "/" + String(date.getMonth() + 1).padStart(2, "0");
+  }
+
+  function qualityLabel(value) {
+    const labels = { 1: "pessima", 2: "scarsa", 3: "media", 4: "buona", 5: "ottima" };
+    return labels[Number(value)] || "non indicata";
+  }
+
+  function scoreClass(label) {
+    if (label === "ottimo" || label === "buono") return "good";
+    if (label === "discreto") return "mid";
+    if (label === "da migliorare") return "bad";
+    return "";
+  }
+
+  function drawLineChart(canvas, emptyEl, points, options = {}) {
+    const rect = canvas.getBoundingClientRect();
+    if (!points || !points.length || rect.width < 20) {
+      canvas.style.visibility = "hidden";
+      if (emptyEl) emptyEl.classList.remove("hidden");
+      return;
+    }
+    canvas.style.visibility = "visible";
+    if (emptyEl) emptyEl.classList.add("hidden");
+    const dpr = window.devicePixelRatio || 1;
+    canvas.width = Math.max(1, Math.round(rect.width * dpr));
+    canvas.height = Math.max(1, Math.round(rect.height * dpr));
+    const ctx = canvas.getContext("2d");
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    const w = rect.width;
+    const h = rect.height;
+    const pad = { left: 42, right: 14, top: 14, bottom: 26 };
+    const plotW = Math.max(1, w - pad.left - pad.right);
+    const plotH = Math.max(1, h - pad.top - pad.bottom);
+    const times = points.map((p) => Number(p.t) || 0);
+    const values = points.map((p) => Number(p.hr) || 0);
+    const minT = Math.min(...times);
+    const maxT = Math.max(...times);
+    const spanT = Math.max(1, maxT - minT);
+    let minV = Math.min(...values) - 8;
+    let maxV = Math.max(...values) + 8;
+    minV = Math.max(30, Math.round(minV / 10) * 10);
+    maxV = Math.min(220, Math.max(minV + 20, Math.round(maxV / 10) * 10));
+    const spanV = Math.max(1, maxV - minV);
+    const x = (t) => pad.left + ((t - minT) / spanT) * plotW;
+    const y = (v) => pad.top + (1 - (v - minV) / spanV) * plotH;
+
+    const styles = getComputedStyle(document.documentElement);
+    const gridColor = styles.getPropertyValue("--grid").trim() || "#223034";
+    const mutedColor = styles.getPropertyValue("--muted").trim() || "#8fa1a3";
+    const hrColor = styles.getPropertyValue("--hr").trim() || "#ff7a9c";
+    ctx.font = "10px " + (styles.getPropertyValue("--font-data").trim() || "monospace");
+    ctx.lineWidth = 1;
+    for (let i = 0; i <= 4; i++) {
+      const value = minV + (spanV * i) / 4;
+      const py = y(value);
+      ctx.strokeStyle = gridColor;
+      ctx.beginPath();
+      ctx.moveTo(pad.left, py);
+      ctx.lineTo(w - pad.right, py);
+      ctx.stroke();
+      ctx.fillStyle = mutedColor;
+      ctx.textAlign = "right";
+      ctx.textBaseline = "middle";
+      ctx.fillText(String(Math.round(value)), pad.left - 8, py);
+    }
+    ctx.textAlign = "center";
+    ctx.textBaseline = "top";
+    for (let i = 0; i <= 4; i++) {
+      const t = minT + (spanT * i) / 4;
+      ctx.fillStyle = mutedColor;
+      ctx.fillText(formatClock(t), x(t), h - pad.bottom + 8);
+    }
+
+    const gradient = ctx.createLinearGradient(0, pad.top, 0, h - pad.bottom);
+    gradient.addColorStop(0, "rgba(255, 122, 156, .24)");
+    gradient.addColorStop(1, "rgba(255, 122, 156, 0)");
+    ctx.beginPath();
+    ctx.moveTo(x(times[0]), y(values[0]));
+    for (let i = 1; i < points.length; i++) ctx.lineTo(x(times[i]), y(values[i]));
+    ctx.lineTo(x(times[times.length - 1]), h - pad.bottom);
+    ctx.lineTo(x(times[0]), h - pad.bottom);
+    ctx.closePath();
+    ctx.fillStyle = gradient;
+    ctx.fill();
+
+    ctx.beginPath();
+    ctx.moveTo(x(times[0]), y(values[0]));
+    for (let i = 1; i < points.length; i++) ctx.lineTo(x(times[i]), y(values[i]));
+    ctx.strokeStyle = hrColor;
+    ctx.lineWidth = 2;
+    ctx.lineJoin = "round";
+    ctx.lineCap = "round";
+    ctx.stroke();
+
+    const lastIndex = values.length - 1;
+    ctx.beginPath();
+    ctx.arc(x(times[lastIndex]), y(values[lastIndex]), 3.2, 0, Math.PI * 2);
+    ctx.fillStyle = hrColor;
+    ctx.fill();
+    if (options.label) {
+      ctx.fillStyle = mutedColor;
+      ctx.textAlign = "left";
+      ctx.textBaseline = "top";
+      ctx.fillText(options.label, pad.left, 1);
+    }
+  }
+
+  function drawTrend(canvas, emptyEl, sessions) {
+    const points = sessions
+      .filter((item) => Number(item.resting_heart_rate_bpm) > 0)
+      .slice(0, 7)
+      .reverse();
+    if (points.length < 2) {
+      canvas.style.visibility = "hidden";
+      if (emptyEl) emptyEl.classList.remove("hidden");
+      return;
+    }
+    canvas.style.visibility = "visible";
+    if (emptyEl) emptyEl.classList.add("hidden");
+    const rect = canvas.getBoundingClientRect();
+    const dpr = window.devicePixelRatio || 1;
+    canvas.width = Math.max(1, Math.round(rect.width * dpr));
+    canvas.height = Math.max(1, Math.round(rect.height * dpr));
+    const ctx = canvas.getContext("2d");
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    const w = rect.width;
+    const h = rect.height;
+    const pad = { left: 40, right: 12, top: 16, bottom: 28 };
+    const plotW = Math.max(1, w - pad.left - pad.right);
+    const plotH = Math.max(1, h - pad.top - pad.bottom);
+    const values = points.map((item) => Number(item.resting_heart_rate_bpm));
+    let minV = Math.min(...values) - 5;
+    let maxV = Math.max(...values) + 5;
+    if (maxV - minV < 15) { minV -= 5; maxV += 5; }
+    const spanV = Math.max(1, maxV - minV);
+    const styles = getComputedStyle(document.documentElement);
+    const gridColor = styles.getPropertyValue("--grid").trim() || "#223034";
+    const mutedColor = styles.getPropertyValue("--muted").trim() || "#8fa1a3";
+    const speedColor = styles.getPropertyValue("--speed").trim() || "#38d6d6";
+    const x = (index) => pad.left + (index / Math.max(1, points.length - 1)) * plotW;
+    const y = (value) => pad.top + (1 - (value - minV) / spanV) * plotH;
+    ctx.font = "10px " + (styles.getPropertyValue("--font-data").trim() || "monospace");
+    ctx.lineWidth = 1;
+    for (let i = 0; i <= 3; i++) {
+      const value = minV + (spanV * i) / 3;
+      const py = y(value);
+      ctx.strokeStyle = gridColor;
+      ctx.beginPath();
+      ctx.moveTo(pad.left, py);
+      ctx.lineTo(w - pad.right, py);
+      ctx.stroke();
+      ctx.fillStyle = mutedColor;
+      ctx.textAlign = "right";
+      ctx.textBaseline = "middle";
+      ctx.fillText(String(Math.round(value)), pad.left - 7, py);
+    }
+    ctx.beginPath();
+    ctx.moveTo(x(0), y(values[0]));
+    for (let i = 1; i < points.length; i++) ctx.lineTo(x(i), y(values[i]));
+    ctx.strokeStyle = speedColor;
+    ctx.lineWidth = 2;
+    ctx.lineJoin = "round";
+    ctx.stroke();
+    points.forEach((item, index) => {
+      ctx.beginPath();
+      ctx.arc(x(index), y(values[index]), 2.8, 0, Math.PI * 2);
+      ctx.fillStyle = speedColor;
+      ctx.fill();
+      ctx.fillStyle = mutedColor;
+      ctx.textAlign = "center";
+      ctx.textBaseline = "top";
+      ctx.fillText(formatDateShort(item.started_at), x(index), h - pad.bottom + 8);
+    });
+  }
+
+  function renderStatus() {
+    const pill = $("statusPill");
+    const text = $("statusText");
+    pill.classList.remove("ready", "live");
+    if (state.active) {
+      pill.classList.add("live");
+      text.textContent = "notte in corso";
+    } else if (state.hr && state.hr.connected) {
+      pill.classList.add("ready");
+      text.textContent = "fascia pronta";
+    } else {
+      text.textContent = "fascia offline";
+    }
+    const device = state.hr && state.hr.device;
+    $("hrDevice").textContent = state.hr && state.hr.connected
+      ? (device && (device.name || device.address) ? (device.name || device.address) : "connessa")
+      : "non connessa";
+    const hint = $("hrHint");
+    if (state.hr && state.hr.connected) {
+      hint.innerHTML = "Fascia pronta. Tieni il Mac collegato e impedisci lo stop durante la notte.";
+    } else {
+      hint.innerHTML = 'Fascia non connessa. <a href="/">Collegala dalla dashboard</a> prima di iniziare.';
+    }
+  }
+
+  function renderCurrent() {
+    const current = state.current;
+    $("currentState").textContent = state.active ? "in corso" : "in attesa";
+    $("currentHr").textContent = state.active && Number(state.heartRate) > 0
+      ? String(Math.round(state.heartRate))
+      : "--";
+    $("currentElapsed").textContent = current ? formatDuration(current.duration_s) : "--";
+    $("currentSamples").textContent = current ? String(current.samples || 0) : "--";
+    $("currentAvg").textContent = current && current.avg_heart_rate_bpm
+      ? Math.round(current.avg_heart_rate_bpm) + " bpm" : "--";
+    $("currentMin").textContent = current && current.min_heart_rate_bpm
+      ? Math.round(current.min_heart_rate_bpm) + " bpm" : "--";
+    $("currentResting").textContent = current && current.resting_heart_rate_bpm
+      ? Math.round(current.resting_heart_rate_bpm) + " bpm" : "--";
+    $("btnStartSleep").disabled = state.active || !(state.hr && state.hr.connected);
+    $("btnStopSleep").disabled = !state.active;
+    const series = state.active && current ? (current.series || []) : [];
+    drawLineChart($("liveChart"), $("liveEmpty"), series, { label: series.length ? "bpm nel tempo" : "" });
+    if (!state.active) {
+      $("liveEmpty").textContent = state.hr && state.hr.connected
+        ? "Fascia pronta. Avvia il tracciamento quando vai a letto."
+        : "Collega la fascia dalla dashboard per iniziare.";
+    }
+  }
+
+  function renderDetail() {
+    const item = state.detail || state.last;
+    const isDetail = Boolean(state.detail);
+    $("detailTitle").textContent = isDetail ? "Notte selezionata" : "Ultima notte";
+    $("detailDate").textContent = item ? formatDate(item.started_at) : "-";
+    if (!item) {
+      $("detailScore").textContent = "--";
+      $("detailLabel").textContent = "nessun dato";
+      $("detailLabel").className = "score-label";
+      $("detailDuration").textContent = "--";
+      $("detailAvg").textContent = "--";
+      $("detailResting").textContent = "--";
+      $("detailCoverage").textContent = "--";
+      $("detailTips").innerHTML = "<li>Nessuna notte salvata. Avvia il tracciamento per creare il primo diario.</li>";
+      $("detailNotes").textContent = "";
+      $("chartLabel").textContent = "-";
+      drawLineChart($("sleepChart"), $("chartEmpty"), [], {});
+      return;
+    }
+    $("detailScore").innerHTML = String(item.score ?? "--") + " <small>/100</small>";
+    $("detailLabel").textContent = item.score_label || "senza punteggio";
+    $("detailLabel").className = "score-label " + scoreClass(item.score_label);
+    $("detailDuration").textContent = formatDuration(item.duration_s);
+    $("detailAvg").textContent = item.avg_heart_rate_bpm ? Math.round(item.avg_heart_rate_bpm) + " bpm" : "--";
+    $("detailResting").textContent = item.resting_heart_rate_bpm ? Math.round(item.resting_heart_rate_bpm) + " bpm" : "--";
+    $("detailCoverage").textContent = item.coverage_pct ? Math.round(item.coverage_pct) + "%" : "--";
+    const tips = item.tips && item.tips.length ? item.tips : ["Nessun consiglio specifico per questa notte."];
+    $("detailTips").innerHTML = tips.map((tip) => "<li>" + escapeHtml(tip) + "</li>").join("");
+    const notes = [];
+    if (item.quality) notes.push("Qualità percepita: " + qualityLabel(item.quality) + ".");
+    if (item.notes) notes.push(item.notes);
+    $("detailNotes").textContent = notes.join(" ");
+    $("chartLabel").textContent = item.score_label || "-";
+    const series = item.series || [];
+    $("chartHint").textContent = series.length
+      ? "Battito della notte selezionata, campionato ogni 30 secondi"
+      : "Nessun campione orario disponibile per questa notte";
+    drawLineChart($("sleepChart"), $("chartEmpty"), series, { label: series.length ? "bpm nel tempo" : "" });
+  }
+
+  function escapeHtml(value) {
+    return String(value)
+      .replaceAll("&", "&amp;")
+      .replaceAll("<", "&lt;")
+      .replaceAll(">", "&gt;")
+      .replaceAll('"', "&quot;")
+      .replaceAll("'", "&#39;");
+  }
+
+  function renderSessions() {
+    const list = $("sessionsList");
+    if (!state.sessions.length) {
+      list.innerHTML = '<div class="session-empty">Nessuna notte salvata.</div>';
+      return;
+    }
+    list.innerHTML = state.sessions.map((item) => {
+      const selected = item.id === state.selectedId ? " selected" : "";
+      return '<div class="session-row' + selected + '">' +
+        '<button class="session-main" type="button" data-session="' + escapeHtml(item.id) + '">' +
+          '<span class="date">' + escapeHtml(formatDate(item.started_at)) + '</span>' +
+          '<span class="val">' + escapeHtml(formatDuration(item.duration_s)) + '</span>' +
+          '<span class="val">' + (item.resting_heart_rate_bpm ? Math.round(item.resting_heart_rate_bpm) + " bpm" : "--") + '</span>' +
+          '<span class="score-mini">' + (item.score ?? "--") + '/100</span>' +
+        '</button>' +
+        '<a class="btn tiny ghost" href="/api/sleep/sessions/' + encodeURIComponent(item.id) + '/csv" download title="Scarica CSV">CSV</a>' +
+      '</div>';
+    }).join("");
+    list.querySelectorAll("[data-session]").forEach((button) => {
+      button.addEventListener("click", () => {
+        const id = button.getAttribute("data-session");
+        if (id) loadDetail(id);
+      });
+    });
+  }
+
+  function renderTrend() {
+    drawTrend($("trendChart"), $("trendEmpty"), state.sessions);
+  }
+
+  function render() {
+    renderStatus();
+    renderCurrent();
+    renderDetail();
+    renderSessions();
+    renderTrend();
+  }
+
+  async function loadDetail(id) {
+    try {
+      const detail = await api("/api/sleep/sessions/" + encodeURIComponent(id));
+      state.detail = detail;
+      state.selectedId = id;
+      render();
+    } catch (error) {
+      toast(error.message, "error");
+    }
+  }
+
+  async function refresh() {
+    try {
+      const sleep = await api("/api/sleep/state");
+      state.active = Boolean(sleep.active);
+      state.current = sleep.current || null;
+      state.last = sleep.last || null;
+      state.hr = sleep.hr || { connected: false, status: "idle", device: null };
+      state.heartRate = Number(sleep.heart_rate_bpm) || 0;
+      const sessions = await api("/api/sleep/sessions");
+      state.sessions = sessions.sessions || [];
+      if (state.active) {
+        state.detail = null;
+        state.selectedId = null;
+      } else {
+        const wanted = state.selectedId && state.sessions.some((item) => item.id === state.selectedId)
+          ? state.selectedId
+          : (state.sessions[0] && state.sessions[0].id);
+        if (wanted) {
+          state.selectedId = wanted;
+          state.detail = await api("/api/sleep/sessions/" + encodeURIComponent(wanted));
+        } else {
+          state.detail = null;
+          state.selectedId = null;
+        }
+      }
+      render();
+    } catch (error) {
+      toast(error.message, "error");
+    }
+  }
+
+  async function startSleep() {
+    try {
+      const response = await api("/api/sleep/start", { method: "POST", body: "{}" });
+      state.active = Boolean(response.active);
+      state.current = response.current || null;
+      state.hr = response.hr || state.hr;
+      state.heartRate = Number(response.heart_rate_bpm) || 0;
+      toast("Tracciamento sonno avviato.");
+      await refresh();
+    } catch (error) {
+      toast(error.message, "error");
+    }
+  }
+
+  async function stopSleep() {
+    if (!state.active) return;
+    if (!window.confirm("Concludere la notte e salvare i dati locali?")) return;
+    const qualityValue = $("sleepQuality").value;
+    const payload = {
+      quality: qualityValue ? Number(qualityValue) : null,
+      notes: $("sleepNotes").value.trim() || null,
+    };
+    try {
+      const response = await api("/api/sleep/stop", {
+        method: "POST",
+        body: JSON.stringify(payload),
+      });
+      if (response.stopped_sleep) {
+        toast("Notte salvata. Punteggio " + response.stopped_sleep.score + "/100.");
+        state.selectedId = response.stopped_sleep.id || null;
+      } else {
+        toast("Notte troppo corta o senza campioni: non è stata salvata.", "error");
+      }
+      $("sleepQuality").value = "";
+      $("sleepNotes").value = "";
+      await refresh();
+    } catch (error) {
+      toast(error.message, "error");
+    }
+  }
+
+  function toggleTheme() {
+    const root = document.documentElement;
+    const next = root.dataset.theme === "light" ? "dark" : "light";
+    root.dataset.theme = next;
+    try { localStorage.setItem("qubo-theme", next); } catch (err) { /* storage opzionale */ }
+    const meta = $("metaTheme");
+    if (meta) meta.setAttribute("content", next === "light" ? "#edf0ee" : "#0a0e10");
+    render();
+  }
+
+  $("btnStartSleep").addEventListener("click", startSleep);
+  $("btnStopSleep").addEventListener("click", stopSleep);
+  $("btnRefresh").addEventListener("click", refresh);
+  $("btnTheme").addEventListener("click", toggleTheme);
+  window.addEventListener("resize", () => {
+    renderCurrent();
+    renderDetail();
+    renderTrend();
+  });
+
+  refresh();
+  setInterval(refresh, 5000);
+})();
+</script>
+</body>
+</html>

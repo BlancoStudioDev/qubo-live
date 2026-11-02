@@ -73,7 +73,7 @@ il comando termina con un messaggio esplicativo.
 .venv/bin/python server.py --address "XXXXXXXX-XXXX-..."
 ```
 
-Apri <http://127.0.0.1:8000>.
+Apri <http://127.0.0.1:8130>.
 
 Il pulsante in alto a destra alterna tema chiaro e scuro: la scelta viene
 salvata nel browser e, alla prima apertura, segue la preferenza di sistema.
@@ -212,6 +212,42 @@ rifiutata perché il rullo è già occupato, la UI usa l'ultima lista trovata e
 mostra il badge **connesso** sui dispositivi già attivi. La fascia viene
 inclusa nei campioni registrati e nel TCX finale.
 
+### Dashboard sonno
+
+La stessa fascia cardio alimenta una dashboard separata: apri
+<http://127.0.0.1:8130/sonno> dal link **Sonno** in alto nella dashboard
+principale. Non è un'attività Strava e non genera TCX.
+
+- **Avvia tracciamento** quando vai a letto e **Concludi notte** quando ti
+  svegli. La fascia deve essere già connessa dalla dashboard principale.
+- La pagina mostra battito in tempo reale, media, minimo, battito a riposo,
+  copertura dei campioni e un grafico della notte.
+- Al termine calcola un indicatore 0-100 e alcuni consigli su durata,
+  regolarità, battito a riposo e copertura. È una stima basata sul battito,
+  non una diagnosi del sonno.
+- Puoi aggiungere qualità percepita e note libere (cena, caffeina, alcol,
+  stress, temperatura della stanza).
+- I dati restano in `data/sleep_sessions` come JSON e CSV. Non vengono
+  caricati su Strava e non entrano nell'elenco delle attività del rullo.
+
+Mentre il tracciamento è attivo il server avvia `caffeinate` su macOS per
+evitare lo stop per inattività. Tieni comunque il Mac collegato e il coperchio
+aperto: la chiusura del coperchio può sospendere il sistema e interrompere la
+fascia.
+
+API principali:
+
+```bash
+curl http://127.0.0.1:8130/api/sleep/state
+curl -X POST http://127.0.0.1:8130/api/sleep/start
+curl -X POST http://127.0.0.1:8130/api/sleep/stop \
+  -H 'Content-Type: application/json' \
+  -d '{"quality":4,"notes":"cena leggera, stanza fresca"}'
+curl http://127.0.0.1:8130/api/sleep/sessions
+curl http://127.0.0.1:8130/api/sleep/sessions/2026-11-01_23-15-00
+curl -OJ http://127.0.0.1:8130/api/sleep/sessions/2026-11-01_23-15-00/csv
+```
+
 Il pulsante **Piano** apre `PIANO_ALLENAMENTO.md` renderizzato su `/piano`, con
 tabelle e link per scaricare il file originale da `/piano.md`.
 
@@ -231,10 +267,10 @@ l'allenamento.
 
 ```bash
 # libreria
-curl http://127.0.0.1:8000/api/workouts
+curl http://127.0.0.1:8130/api/workouts
 
 # crea un allenamento
-curl -X POST http://127.0.0.1:8000/api/workouts \
+curl -X POST http://127.0.0.1:8130/api/workouts \
   -H 'Content-Type: application/json' \
   -d '{"name":"VO2max 10-7","intervals":[
         {"label":"VO2max","duration_s":600,"power_w":300},
@@ -242,7 +278,7 @@ curl -X POST http://127.0.0.1:8000/api/workouts \
       ]}'
 
 # modifica: stesso payload con "id"
-curl -X POST http://127.0.0.1:8000/api/workouts \
+curl -X POST http://127.0.0.1:8130/api/workouts \
   -H 'Content-Type: application/json' \
   -d '{"id":"vo2max-10-7","name":"VO2max 10-7","intervals":[
         {"label":"VO2max","duration_s":600,"power_w":310},
@@ -250,18 +286,18 @@ curl -X POST http://127.0.0.1:8000/api/workouts \
       ]}'
 
 # avvia, pausa, riprendi, concludi e salva
-curl -X POST http://127.0.0.1:8000/api/workout/start \
+curl -X POST http://127.0.0.1:8130/api/workout/start \
   -H 'Content-Type: application/json' -d '{"id":"vo2max-5x3"}'
-curl -X POST http://127.0.0.1:8000/api/workout/pause
-curl -X POST http://127.0.0.1:8000/api/workout/resume
-curl -X POST http://127.0.0.1:8000/api/workout/stop
+curl -X POST http://127.0.0.1:8130/api/workout/pause
+curl -X POST http://127.0.0.1:8130/api/workout/resume
+curl -X POST http://127.0.0.1:8130/api/workout/stop
 
 # sessione libera: avvia e concludi senza allenamento
-curl -X POST http://127.0.0.1:8000/api/session/start
-curl -X POST http://127.0.0.1:8000/api/session/stop
+curl -X POST http://127.0.0.1:8130/api/session/start
+curl -X POST http://127.0.0.1:8130/api/session/stop
 
 # elimina
-curl -X DELETE http://127.0.0.1:8000/api/workouts/vo2max-10-7
+curl -X DELETE http://127.0.0.1:8130/api/workouts/vo2max-10-7
 ```
 
 `POST /api/workouts` senza `id` crea un nuovo allenamento; con `id` aggiorna
@@ -509,25 +545,25 @@ sostituisce il dato FTMS.
 La dashboard espone anche un'API JSON minimale:
 
 ```bash
-curl http://127.0.0.1:8000/api/state
+curl http://127.0.0.1:8130/api/state
 
-curl -X POST http://127.0.0.1:8000/api/resistance \
+curl -X POST http://127.0.0.1:8130/api/resistance \
   -H 'Content-Type: application/json' -d '{"level": 5.0}'
 
-curl -X POST http://127.0.0.1:8000/api/erg \
+curl -X POST http://127.0.0.1:8130/api/erg \
   -H 'Content-Type: application/json' -d '{"watts": 150}'
 
-curl -X POST http://127.0.0.1:8000/api/config \
+curl -X POST http://127.0.0.1:8130/api/config \
   -H 'Content-Type: application/json' \
   -d '{"power_offset_w": 30, "speed_offset_kmh": 2.5}'
 
 # Scarica il TCX della sessione in corso o di una sessione salvata
-curl -OJ http://127.0.0.1:8000/api/export.tcx
-curl -OJ http://127.0.0.1:8000/api/sessions/2026-10-23_17-56-39/tcx
+curl -OJ http://127.0.0.1:8130/api/export.tcx
+curl -OJ http://127.0.0.1:8130/api/sessions/2026-10-23_17-56-39/tcx
 
 # Piano di allenamento: pagina HTML e file Markdown originale
-curl http://127.0.0.1:8000/piano
-curl -OJ http://127.0.0.1:8000/piano.md
+curl http://127.0.0.1:8130/piano
+curl -OJ http://127.0.0.1:8130/piano.md
 ```
 
 `/api/resistance` accetta `0-20`; `/api/erg` accetta `0-4000` W. Entrambi

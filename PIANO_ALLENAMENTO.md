@@ -19,8 +19,9 @@
   Palestra 2-3 volte a settimana per upper body, senza aggiungere una seduta
   gambe dedicata: la forza specifica si costruisce con i lavori a bassa cadenza
   in bici.
-- Cardiofrequenzimetro in arrivo: per ora usa la scala RPE; quando arriva lo
-  integriamo in dashboard e nel TCX.
+- Cardiofrequenzimetro Coospo H6 supportato: battito in dashboard, media/max,
+  HR in CSV/JSON e TCX. La stessa fascia alimenta la dashboard Sonno su
+  `/sonno`, separata dalle attività Strava.
 - Ciclocomputer IGPSPORT BSC300T: in casa non serve, la dashboard è lo schermo.
 - Calibrazione del rullo: **non si tocca più**. Restano +50 W di offset potenza,
   +2,5 km/h di offset velocità e FTP 179 W. I valori attuali sono la reference
@@ -207,13 +208,20 @@ Per ogni allenamento la dashboard mostra **Note e istruzioni** con cadenza,
 resistenza di partenza, RPE e nutrizione durante. Il piano completo si apre dal
 pulsante **Piano** o da `/piano`; il file originale è scaricabile da `/piano.md`.
 
-## Cardiofrequenzimetro
+## Cardiofrequenzimetro e sonno
 
-Quando arriva, lo colleghiamo alla dashboard come secondo dispositivo BLE:
-card HR, media/max, HR nel CSV/JSON e nel TCX, così su Strava vedi anche la
-frequenza cardiaca. Fino ad allora usa la scala RPE e la respirazione. Per
-definire le zone HR ci serve la FC massima (test o stima 220-età); la Z2 attuale
-è 130-140 bpm.
+La fascia Coospo H6 è supportata come secondo dispositivo BLE: card HR,
+media/max, HR nel CSV/JSON e nel TCX, così su Strava vedi anche la frequenza
+cardiaca. Per definire le zone HR ci serve la FC massima (test o stima 220-età);
+la Z2 attuale è 130-140 bpm.
+
+La stessa fascia alimenta la dashboard **Sonno** su `/sonno`. Avvia il
+tracciamento quando vai a letto e concludilo quando ti svegli: la pagina salva
+battito, durata, regolarità e un indicatore con consigli. I dati restano in
+`data/sleep_sessions` e non vengono caricati su Strava. È un diario basato sul
+battito, non una diagnosi del sonno: se il riposo è disturbato per settimane,
+parla con un medico. Tieni il Mac collegato e il coperchio aperto durante la
+notte, perché la sospensione del sistema interrompe la registrazione BLE.
 
 ## Nutrizione
 

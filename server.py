@@ -17,7 +17,9 @@ import asyncio
 import contextlib
 import json
 import math
+import os
 import re
+import subprocess
 import sys
 import time
 from collections import deque
@@ -31,10 +33,13 @@ from pydantic import BaseModel, Field
 SCRIPT_DIR = Path(__file__).resolve().parent
 DATA_DIR = SCRIPT_DIR / "data" / "trainer_sessions"
 SIM_DATA_DIR = SCRIPT_DIR / "data" / "sim_sessions"
+SLEEP_DATA_DIR = SCRIPT_DIR / "data" / "sleep_sessions"
+SIM_SLEEP_DATA_DIR = SCRIPT_DIR / "data" / "sim_sleep_sessions"
 CONFIG_FILE = SCRIPT_DIR / "data" / "trainer_config.json"
 WORKOUTS_FILE = SCRIPT_DIR / "data" / "workouts.json"
 INDEX_HTML = SCRIPT_DIR / "static" / "index.html"
 MINI_HTML = SCRIPT_DIR / "static" / "mini.html"
+SLEEP_HTML = SCRIPT_DIR / "static" / "sonno.html"
 PLAN_MD = SCRIPT_DIR / "PIANO_ALLENAMENTO.md"
 
 sys.path.insert(0, str(SCRIPT_DIR))
@@ -48,6 +53,12 @@ from session import (  # noqa: E402
     tcx_from_csv,
 )
 from plan import render_plan_page  # noqa: E402
+from sleep import (  # noqa: E402
+    SleepRecorder,
+    list_sleep_sessions,
+    load_sleep_session,
+    sleep_csv_path,
+)
 from workouts import (  # noqa: E402
     load_workouts,
     normalize_workout,
@@ -96,6 +107,7 @@ class Manager:
         scan_time: float = 6.0,
     ) -> None:
         self.data_dir = SIM_DATA_DIR if simulate else DATA_DIR
+        self.sleep_dir = SIM_SLEEP_DATA_DIR if simulate else SLEEP_DATA_DIR
         self.simulate = simulate
         self.session_source = "sim" if simulate else "trainer"
         self.scan_time = scan_time
@@ -153,6 +165,12 @@ class Manager:
         self.hr_device: dict[str, object] | None = None
         self.hr_battery: int | None = None
         self.hr_error: str | None = None
+        self.sleep_active = False
+        self.sleep_recorder: SleepRecorder | None = None
+        self.last_sleep: dict[str, object] | None = (
+            list_sleep_sessions(self.sleep_dir, limit=1) or [None]
+        )[0]
+        self._caffeinate: subprocess.Popen[bytes] | None = None
         self._sim_task: asyncio.Task | None = None
         self._tick_task: asyncio.Task | None = None
         self._scan_lock = asyncio.Lock()
@@ -203,6 +221,80 @@ class Manager:
             weight_kg=float(self.config["weight_kg"]),
         )
 
+    def _keep_awake_start(self) -> None:
+        """Keep macOS awake while the strap records an overnight session."""
+        if self.simulate or sys.platform != "darwin" or self._caffeinate is not None:
+            return
+        try:
+            self._caffeinate = subprocess.Popen(
+                ["caffeinate", "-i", "-w", str(os.getpid())],
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.DEVNULL,
+            )
+        except OSError:
+            self._caffeinate = None
+
+    def _keep_awake_stop(self) -> None:
+        process = self._caffeinate
+        self._caffeinate = None
+        if process is None:
+            return
+        try:
+            process.terminate()
+            process.wait(timeout=1.0)
+        except (OSError, subprocess.TimeoutExpired):
+            pass
+
+    def sleep_snapshot(self) -> dict[str, object]:
+        current: dict[str, object] | None = None
+        if self.sleep_active and self.sleep_recorder is not None:
+            current = self.sleep_recorder.summary(include_series=True)
+        last = self.last_sleep
+        if last is None:
+            last = (list_sleep_sessions(self.sleep_dir, limit=1) or [None])[0]
+            self.last_sleep = last
+        return {
+            "active": self.sleep_active,
+            "current": current,
+            "last": last,
+            "heart_rate_bpm": round(self.effective_metrics().heart_rate_bpm, 1),
+            "hr": {
+                "connected": self.hr_status == "connected",
+                "status": self.hr_status,
+                "device": self.hr_device,
+            },
+        }
+
+    def start_sleep(self) -> dict[str, object]:
+        if self.sleep_active:
+            raise ValueError("tracciamento sonno già attivo")
+        if self.session_active or self.active_workout is not None:
+            raise ValueError("concludi prima l'allenamento")
+        if self.hr_status != "connected" and not self.simulate:
+            raise ValueError("collega la fascia cardio prima di iniziare")
+        self.sleep_recorder = SleepRecorder(self.sleep_dir)
+        self.sleep_active = True
+        self._keep_awake_start()
+        return self.sleep_snapshot()
+
+    def stop_sleep(
+        self,
+        *,
+        quality: int | None = None,
+        notes: str | None = None,
+    ) -> dict[str, object]:
+        if not self.sleep_active or self.sleep_recorder is None:
+            raise ValueError("nessuna notte attiva")
+        summary = self.sleep_recorder.finalize(quality=quality, notes=notes)
+        if summary is not None:
+            self.last_sleep = summary
+        self.sleep_active = False
+        self.sleep_recorder = None
+        self._keep_awake_stop()
+        state = self.sleep_snapshot()
+        state["stopped_sleep"] = summary
+        return state
+
     def _finalize_current_session(self) -> dict[str, object] | None:
         """Write the open session to disk, if it has enough data."""
         if not self.session_active and not self.recorder.samples:
@@ -231,6 +323,11 @@ class Manager:
 
     def _begin_session(self) -> None:
         """Finalize anything open and start a fresh recording session."""
+        if self.sleep_active:
+            self.stop_sleep(
+                quality=None,
+                notes="Interrotto per iniziare un allenamento",
+            )
         self._finalize_current_session()
         self._reset_workout_state()
         self.recorder = self._new_recorder()
@@ -301,6 +398,8 @@ class Manager:
             await asyncio.sleep(0.4)
 
     async def shutdown(self) -> None:
+        if self.sleep_active:
+            self.stop_sleep(quality=None, notes="Server arrestato")
         if self._sim_task:
             self._sim_task.cancel()
             with contextlib.suppress(asyncio.CancelledError):
@@ -311,6 +410,8 @@ class Manager:
                 await self._tick_task
         if self.client:
             await self.client.disconnect()
+        if self.hr_client:
+            await self.hr_client.disconnect()
         self.recorder.finalize()
 
     # -- data --------------------------------------------------------------
@@ -489,6 +590,8 @@ class Manager:
                 continue
             metrics = self.effective_metrics()
             self._record_sample(metrics)
+            if self.sleep_active and self.sleep_recorder is not None:
+                self.sleep_recorder.add(metrics)
             point: dict[str, object] = {
                 "t": int(time.time()),
                 "p": round(metrics.power_w, 1),
@@ -626,6 +729,8 @@ class Manager:
         await self.hr_client.connect(address)
 
     async def disconnect(self) -> None:
+        if self.sleep_active:
+            self.stop_sleep(quality=None, notes="Disconnessione")
         if self._sim_task:
             self._sim_task.cancel()
             with contextlib.suppress(asyncio.CancelledError):
@@ -1108,6 +1213,11 @@ class WorkoutStartRequest(BaseModel):
     id: str = Field(min_length=1)
 
 
+class SleepStopRequest(BaseModel):
+    quality: int | None = Field(default=None, ge=1, le=5)
+    notes: str | None = Field(default=None, max_length=2000)
+
+
 def create_app(args: argparse.Namespace) -> FastAPI:
     manager = Manager(simulate=args.simulate, scan_time=args.scan_time)
 
@@ -1134,6 +1244,10 @@ def create_app(args: argparse.Namespace) -> FastAPI:
     def mini() -> FileResponse:
         return FileResponse(MINI_HTML)
 
+    @app.get("/sonno")
+    def sonno() -> FileResponse:
+        return FileResponse(SLEEP_HTML)
+
     @app.get("/piano")
     def piano() -> Response:
         try:
@@ -1156,6 +1270,59 @@ def create_app(args: argparse.Namespace) -> FastAPI:
     @app.get("/api/state")
     def state() -> dict[str, object]:
         return manager.snapshot()
+
+    @app.get("/api/sleep/state")
+    def sleep_state() -> dict[str, object]:
+        return manager.sleep_snapshot()
+
+    @app.post("/api/sleep/start")
+    def sleep_start() -> dict[str, object]:
+        try:
+            return manager.start_sleep()
+        except ValueError as exc:
+            raise HTTPException(status_code=409, detail=str(exc)) from exc
+
+    @app.post("/api/sleep/stop")
+    def sleep_stop(payload: SleepStopRequest) -> dict[str, object]:
+        try:
+            return manager.stop_sleep(
+                quality=payload.quality,
+                notes=payload.notes,
+            )
+        except ValueError as exc:
+            raise HTTPException(status_code=409, detail=str(exc)) from exc
+
+    @app.get("/api/sleep/sessions")
+    def sleep_sessions() -> dict[str, object]:
+        return {"sessions": list_sleep_sessions(manager.sleep_dir)}
+
+    @app.get("/api/sleep/sessions/{name}")
+    def sleep_session(name: str) -> dict[str, object]:
+        if not re.fullmatch(r"[A-Za-z0-9_.-]+", name):
+            raise HTTPException(status_code=400, detail="nome non valido")
+        try:
+            return load_sleep_session(manager.sleep_dir, name)
+        except (OSError, ValueError) as exc:
+            raise HTTPException(status_code=404, detail="notte non trovata") from exc
+
+    @app.get("/api/sleep/sessions/{name}/csv")
+    def sleep_session_csv(name: str) -> FileResponse:
+        if not re.fullmatch(r"[A-Za-z0-9_.-]+", name):
+            raise HTTPException(status_code=400, detail="nome non valido")
+        try:
+            path = sleep_csv_path(manager.sleep_dir, name).resolve()
+        except ValueError as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
+        if (
+            path.parent != manager.sleep_dir.resolve()
+            or not path.is_file()
+        ):
+            raise HTTPException(status_code=404, detail="notte non trovata")
+        return FileResponse(
+            path,
+            filename=f"sonno-{name}.csv",
+            media_type="text/csv",
+        )
 
     @app.get("/api/devices")
     async def devices() -> dict[str, object]:
