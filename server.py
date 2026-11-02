@@ -39,7 +39,7 @@ PLAN_MD = SCRIPT_DIR / "PIANO_ALLENAMENTO.md"
 
 sys.path.insert(0, str(SCRIPT_DIR))
 
-from ble_client import TrainerClient, scan_devices  # noqa: E402
+from ble_client import HeartRateClient, TrainerClient, scan_devices  # noqa: E402
 from session import (  # noqa: E402
     Metrics,
     SessionRecorder,
@@ -68,6 +68,7 @@ class Manager:
         "power_w": ("2ad2", "2a63", "sim"),
         "speed_kmh": ("2ad2", "2a63", "2a5b", "sim"),
         "cadence_rpm": ("2a63", "2a5b", "sim"),
+        "heart_rate_bpm": ("2a37", "2ad2", "sim"),
     }
 
     # Anything outside these ranges cannot come from a Qubo Digital/Power
@@ -76,6 +77,7 @@ class Manager:
         "power_w": (0.0, 1200.0),
         "speed_kmh": (0.0, 120.0),
         "cadence_rpm": (0.0, 220.0),
+        "heart_rate_bpm": (20.0, 250.0),
     }
 
     # Below these raw values the calibration offset ramps in instead of
@@ -145,6 +147,12 @@ class Manager:
         self._workout_paused_total = 0.0
 
         self.client: TrainerClient | None = None
+        self.hr_client: HeartRateClient | None = None
+        self.hr_status = "idle"
+        self.hr_detail = ""
+        self.hr_device: dict[str, object] | None = None
+        self.hr_battery: int | None = None
+        self.hr_error: str | None = None
         self._sim_task: asyncio.Task | None = None
         self._tick_task: asyncio.Task | None = None
         self._scan_lock = asyncio.Lock()
@@ -423,6 +431,23 @@ class Manager:
             self.error = detail
             self.control = self._empty_control()
 
+    def _on_hr_status(self, status: str, detail: str) -> None:
+        self.hr_status = status
+        self.hr_detail = detail
+        if status == "connected":
+            self.hr_error = None
+            if self.hr_client is not None:
+                info = dict(self.hr_device or {})
+                for key, value in self.hr_client.device_info.items():
+                    if value:
+                        info[key] = value
+                self.hr_device = info
+                self.hr_battery = self.hr_client.battery
+        elif status in {"connecting", "reconnecting"}:
+            self.hr_error = None
+        elif status == "error":
+            self.hr_error = detail
+
     def effective_metrics(self) -> Metrics:
         now = time.monotonic()
 
@@ -446,6 +471,7 @@ class Manager:
                 self.CALIBRATION_FULL_AT["speed_kmh"],
             ),
             cadence_rpm=fresh("cadence_rpm", 3.0),
+            heart_rate_bpm=fresh("heart_rate_bpm", 8.0),
         )
 
     def _record_sample(self, metrics: Metrics) -> None:
@@ -456,7 +482,10 @@ class Manager:
     async def _tick_loop(self) -> None:
         while True:
             await asyncio.sleep(1.0)
-            if self.status not in {"connected", "simulating"}:
+            if (
+                self.status not in {"connected", "simulating"}
+                and self.hr_status != "connected"
+            ):
                 continue
             metrics = self.effective_metrics()
             self._record_sample(metrics)
@@ -465,6 +494,7 @@ class Manager:
                 "p": round(metrics.power_w, 1),
                 "s": round(metrics.speed_kmh, 1),
                 "c": round(metrics.cadence_rpm, 1),
+                "h": round(metrics.heart_rate_bpm, 1),
             }
             workout = self.workout_snapshot()
             if workout.get("active") and workout.get("status") == "running":
@@ -498,6 +528,14 @@ class Manager:
             "rejected": list(self.rejected),
             "control": self.control,
             "workout": self.workout_snapshot(),
+            "hr": {
+                "status": self.hr_status,
+                "detail": self.hr_detail,
+                "device": self.hr_device,
+                "battery": self.hr_battery,
+                "error": self.hr_error,
+                "connected": self.hr_status == "connected",
+            },
             "server_time": time.time(),
         }
 
@@ -511,18 +549,27 @@ class Manager:
     async def autoconnect(self) -> None:
         try:
             self.status = "scanning"
-            self.status_detail = "ricerca del sensore Elite..."
+            self.status_detail = "ricerca del rullo e della fascia..."
             devices = await self.scan()
         except Exception as exc:  # noqa: BLE001 - surfaced in the UI
             self.status = "error"
             self.error = str(exc)
             return
-        candidates = [d for d in devices if int(d.get("score", 0)) > 0]
-        if not candidates:
+        trainers = [d for d in devices if d.get("kind") == "trainer"]
+        if not trainers:
+            trainers = [
+                d
+                for d in devices
+                if d.get("kind") != "heart_rate" and int(d.get("score", 0)) > 0
+            ]
+        heart_rates = [d for d in devices if d.get("kind") == "heart_rate"]
+        if trainers:
+            await self.connect(str(trainers[0]["address"]))
+        else:
             self.status = "idle"
-            self.status_detail = "nessun sensore trovato"
-            return
-        await self.connect(str(candidates[0]["address"]))
+            self.status_detail = "rullo non trovato"
+        if heart_rates:
+            await self.connect_hr(str(heart_rates[0]["address"]))
 
     async def connect(self, address: str) -> None:
         if self.simulate:
@@ -557,6 +604,27 @@ class Manager:
         )
         await self.client.connect(address)
 
+    async def connect_hr(self, address: str) -> None:
+        if self.simulate:
+            return
+        if self.hr_client:
+            await self.hr_client.disconnect()
+
+        cached = next(
+            (d for d in self._cached_devices if d["address"] == address), None
+        )
+        self.hr_device = cached or {"address": address, "name": "(sconosciuto)"}
+        self.hr_status = "connecting"
+        self.hr_detail = "apertura canale fascia"
+        self.hr_error = None
+
+        self.hr_client = HeartRateClient(
+            on_metrics=self._apply_metrics,
+            on_status=self._on_hr_status,
+            on_raw=self._on_raw,
+        )
+        await self.hr_client.connect(address)
+
     async def disconnect(self) -> None:
         if self._sim_task:
             self._sim_task.cancel()
@@ -566,6 +634,14 @@ class Manager:
         if self.client:
             await self.client.disconnect()
             self.client = None
+        if self.hr_client:
+            await self.hr_client.disconnect()
+            self.hr_client = None
+        self.hr_status = "idle"
+        self.hr_detail = "disconnesso"
+        self.hr_device = None
+        self.hr_battery = None
+        self.hr_error = None
         self.status = "idle"
         self.status_detail = "disconnesso"
         self.sources.clear()
@@ -1086,12 +1162,29 @@ def create_app(args: argparse.Namespace) -> FastAPI:
         try:
             found = await manager.scan()
         except Exception as exc:  # noqa: BLE001 - message for the UI
+            # While the trainer is connected some adapters refuse a second
+            # scan.  Keep the last discovery list usable so the user can
+            # still select the heart-rate strap from it.
+            cached = list(manager._cached_devices)
+            if cached:
+                return {"devices": cached, "error": str(exc)}
             raise HTTPException(status_code=503, detail=str(exc)) from exc
         return {"devices": found, "error": None}
 
     @app.post("/api/connect")
     async def connect(payload: ConnectRequest) -> dict[str, object]:
-        await manager.connect(payload.address)
+        cached = next(
+            (
+                device
+                for device in manager._cached_devices
+                if device.get("address") == payload.address
+            ),
+            None,
+        )
+        if cached and cached.get("kind") == "heart_rate":
+            await manager.connect_hr(payload.address)
+        else:
+            await manager.connect(payload.address)
         return manager.snapshot()
 
     @app.post("/api/disconnect")
@@ -1290,7 +1383,7 @@ def parse_args() -> argparse.Namespace:
         description="Dashboard locale per Elite Qubo (QD)"
     )
     parser.add_argument("--host", default="127.0.0.1")
-    parser.add_argument("--port", type=int, default=8000)
+    parser.add_argument("--port", type=int, default=8130)
     parser.add_argument(
         "--simulate",
         action="store_true",

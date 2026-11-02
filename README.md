@@ -202,6 +202,16 @@ cosa fare, cadenza, resistenza di partenza, come sentirti e cosa mangiare
 durante. Le note si modificano dall'editor dell'allenamento (campo **Note e
 istruzioni**, fino a 6000 caratteri) e sono incluse in `GET /api/workouts`.
 
+### Collegare rullo e fascia cardio insieme
+
+Puoi collegare contemporaneamente il rullo e la fascia cardio. Premi
+**Cerca sensore** e collega il primo dispositivo: la lista resta aperta, così
+puoi selezionare anche il secondo. La card **Frequenza cardiaca** mostra il
+battito in tempo reale e il nome della fascia connessa. Se la scansione viene
+rifiutata perché il rullo è già occupato, la UI usa l'ultima lista trovata e
+mostra il badge **connesso** sui dispositivi già attivi. La fascia viene
+inclusa nei campioni registrati e nel TCX finale.
+
 Il pulsante **Piano** apre `PIANO_ALLENAMENTO.md` renderizzato su `/piano`, con
 tabelle e link per scaricare il file originale da `/piano.md`.
 
@@ -542,10 +552,15 @@ pannello Debug BLE:
   dopo un periodo di inattività va in sleep e smette di fare advertising,
   quindi se il server è appena stato riavviato pedala qualche secondo e premi
   di nuovo **Cerca sensore**. Deve essere scollegato da Zwift / My E-Training /
-  altri telefoni.
+  altri telefoni. La scansione ora funziona anche con il rullo già connesso:
+  apre la lista e mostra i dispositivi con il badge **connesso**.
 - **Bluetooth non autorizzato**: concedi il permesso al terminale e riavvia
   lo script.
-- **Connessione occupata**: un solo central BLE può essere connesso alla volta.
+- **Connessione occupata**: il server può gestire **due connessioni BLE
+  separate**: rullo e fascia cardio. Se la scansione fallisce mentre il rullo
+  è attivo, il server riusa l'ultima lista trovata e puoi comunque collegare
+  la fascia. Non usare due app diverse (Zwift, My E-Training) sullo stesso
+  sensore contemporaneamente.
 - **Controlli disabilitati**: la UI li abilita solo con il rullo connesso e il
   Control Point FTMS disponibile.
 - **La resistenza non cambia**: la dashboard invia già Start/Resume; se il

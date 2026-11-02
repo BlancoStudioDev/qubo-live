@@ -38,6 +38,9 @@ FTMS_FEATURE = "00002acc-0000-1000-8000-00805f9b34fb"
 FTMS_CONTROL_POINT = "00002ad9-0000-1000-8000-00805f9b34fb"
 FTMS_RESISTANCE_RANGE = "00002ad6-0000-1000-8000-00805f9b34fb"
 FTMS_POWER_RANGE = "00002ad8-0000-1000-8000-00805f9b34fb"
+HR_SERVICE = "0000180d-0000-1000-8000-00805f9b34fb"
+HR_MEASUREMENT = "00002a37-0000-1000-8000-00805f9b34fb"
+BODY_SENSOR_LOCATION = "00002a38-0000-1000-8000-00805f9b34fb"
 
 # FTMS Control Point result codes (response opcode 0x80).
 FTMS_RESULTS = {
@@ -65,9 +68,12 @@ PROFILE_NAMES = {
     "1826": "FTMS",
     "180a": "Device Info",
     "180f": "Battery",
+    "180d": "Heart Rate",
 }
 
-KNOWN_STANDARD_SERVICES = {"1800", "1801", "180a", "180f", "1816", "1818", "1826"}
+KNOWN_STANDARD_SERVICES = {
+    "1800", "1801", "180a", "180f", "1816", "1818", "1826", "180d"
+}
 
 
 def short_uuid(uuid: str) -> str:
@@ -100,6 +106,16 @@ class DeviceInfo:
             if short_uuid(u) in PROFILE_NAMES
         ]
 
+    @property
+    def kind(self) -> str:
+        shorts = {short_uuid(u) for u in self.service_uuids}
+        name = self.name.lower()
+        if "1818" in shorts or "1816" in shorts or "1826" in shorts:
+            return "trainer"
+        if "180d" in shorts or "h6" in name or "heart" in name:
+            return "heart_rate"
+        return "other"
+
     def score(self) -> int:
         score = 0
         name = self.name.lower()
@@ -114,6 +130,8 @@ class DeviceInfo:
             score += 30
         if "180a" in shorts:
             score += 5
+        if "180d" in shorts:
+            score += 12
         return score
 
     def to_dict(self) -> dict:
@@ -122,6 +140,7 @@ class DeviceInfo:
             "name": self.name or "(senza nome)",
             "rssi": self.rssi,
             "profiles": self.profiles,
+            "kind": self.kind,
             "service_uuids": [short_uuid(u) for u in self.service_uuids],
             "score": self.score(),
         }
@@ -379,6 +398,54 @@ def decode_ftms(data: bytes) -> dict[str, float]:
     except struct.error:
         # Keep the fields decoded before the truncated one.
         log.debug("Truncated FTMS frame %s", data.hex())
+    return values
+
+
+def decode_heart_rate(data: bytes) -> dict[str, float]:
+    """Bluetooth SIG Heart Rate Measurement (0x2A37).
+
+    Bit 0 of the flags selects a uint8 or uint16 BPM value.  Contact and
+    energy-expenditure fields that may follow are ignored: the dashboard only
+    needs the instantaneous beats per minute.
+    """
+    if not data:
+        return {}
+    flags = data[0]
+    offset = 1
+    try:
+        if flags & 0x01:
+            if len(data) < offset + 2:
+                return {}
+            bpm = struct.unpack_from("<H", data, offset)[0]
+            offset += 2
+        else:
+            if len(data) < offset + 1:
+                return {}
+            bpm = data[offset]
+            offset += 1
+    except struct.error:
+        return {}
+    if bpm <= 0 or bpm > 255:
+        return {}
+    values = {"heart_rate_bpm": float(bpm)}
+    if flags & 0x08:  # energy expended present (uint16 kJ)
+        if len(data) >= offset + 2:
+            values["energy_expended_kj"] = float(
+                struct.unpack_from("<H", data, offset)[0]
+            )
+            offset += 2
+    if flags & 0x10:  # RR intervals present (1/1024 s each)
+        intervals = []
+        while len(data) >= offset + 2:
+            raw = struct.unpack_from("<H", data, offset)[0]
+            if raw <= 0:
+                break
+            intervals.append(raw)
+            offset += 2
+        if intervals:
+            values["rr_interval_ms"] = round(
+                sum(intervals) / len(intervals) * 1000.0 / 1024.0, 1
+            )
     return values
 
 
@@ -811,6 +878,153 @@ async def _read_text(client: BleakClient, uuid: str) -> str | None:
         return None
     text = data.decode("utf-8", errors="replace").strip("\x00 ")
     return text or None
+
+
+class HeartRateClient:
+    """Minimal BLE client for a standard Heart Rate monitor (Coospo H6).
+
+    It connects to the Heart Rate Service (0x180D), subscribes to the Heart
+    Rate Measurement characteristic (0x2A37) and reports BPM through the same
+    metrics callback used by the trainer.
+    """
+
+    def __init__(
+        self,
+        on_metrics: MetricsCallback,
+        on_status: StatusCallback | None = None,
+        on_raw: RawCallback | None = None,
+    ) -> None:
+        self.on_metrics = on_metrics
+        self.on_status = on_status or (lambda _status, _detail: None)
+        self.on_raw = on_raw or (lambda _uuid, _data: None)
+        self.client: BleakClient | None = None
+        self.device_info: dict[str, object] = {}
+        self.battery: int | None = None
+        self.body_sensor_location: str | None = None
+        self.subscribed: list[str] = []
+        self._address: str | None = None
+        self._task: asyncio.Task | None = None
+        self._stop = asyncio.Event()
+        self._disconnected = asyncio.Event()
+
+    async def connect(self, address: str) -> None:
+        await self.disconnect()
+        self._address = address
+        self._stop = asyncio.Event()
+        self._task = asyncio.create_task(self._run(address), name="ble-heart")
+
+    async def disconnect(self) -> None:
+        self._stop.set()
+        self._disconnected.set()
+        client = self.client
+        if client is not None:
+            with contextlib.suppress(Exception):
+                await client.disconnect()
+        task = self._task
+        self._task = None
+        if task is not None:
+            task.cancel()
+            with contextlib.suppress(asyncio.CancelledError, Exception):
+                await task
+        self.client = None
+
+    async def _run(self, address: str) -> None:
+        attempt = 0
+        while not self._stop.is_set():
+            try:
+                self.on_status("connecting", f"connessione fascia a {address}")
+                self._disconnected.clear()
+                async with BleakClient(
+                    address,
+                    timeout=20.0,
+                    disconnected_callback=self._on_disconnect,
+                ) as client:
+                    self.client = client
+                    attempt = 0
+                    await self._setup(client)
+                    self.on_status("connected", "battito in ascolto")
+                    await self._disconnected.wait()
+            except asyncio.CancelledError:
+                raise
+            except Exception as exc:  # noqa: BLE001 - surfaced to the UI
+                log.warning("Heart rate BLE connection failed: %s", exc)
+                self.on_status("error", _friendly_error(exc))
+            finally:
+                self.client = None
+                self.subscribed = []
+            if self._stop.is_set():
+                break
+            attempt += 1
+            delay = min(2 * attempt, 10)
+            self.on_status("reconnecting", f"nuovo tentativo fascia tra {delay}s")
+            with contextlib.suppress(asyncio.TimeoutError):
+                await asyncio.wait_for(self._stop.wait(), timeout=delay)
+
+    def _on_disconnect(self, _client: BleakClient) -> None:
+        self._disconnected.set()
+
+    async def _setup(self, client: BleakClient) -> None:
+        self.device_info = await self._read_device_info(client)
+        self.battery = await self._read_battery(client)
+        self.subscribed = []
+        location = await _read(client, BODY_SENSOR_LOCATION)
+        if location:
+            names = {
+                0: "altro",
+                1: "torace",
+                2: "polso",
+                3: "dito",
+                4: "mano",
+                5: "orecchio",
+                6: "piede",
+            }
+            self.body_sensor_location = names.get(int(location[0]), "altro")
+            self.device_info["body_sensor"] = self.body_sensor_location
+        measurement = next(
+            (
+                char
+                for char in client.services.characteristics.values()
+                if short_uuid(char.uuid) == "2a37"
+            ),
+            None,
+        )
+        if measurement is None:
+            raise RuntimeError("Heart Rate Measurement (0x2A37) non trovata")
+        await client.start_notify(measurement, self._handler)
+        self.subscribed.append("2a37")
+        log.info(
+            "Heart rate connected to %s (%s)",
+            self.device_info.get("name") or self.device_info.get("model") or "?",
+            self.device_info.get("address", "?"),
+        )
+
+    def _handler(self, _sender, data: bytearray) -> None:
+        raw = bytes(data)
+        self.on_raw("2a37", raw)
+        values = decode_heart_rate(raw)
+        if values:
+            self.on_metrics("2a37", values)
+
+    async def _read_device_info(self, client: BleakClient) -> dict[str, object]:
+        info: dict[str, object] = {"address": self._address}
+        fields = {
+            "manufacturer": MANUFACTURER_NAME,
+            "model": MODEL_NUMBER,
+            "serial": SERIAL_NUMBER,
+            "firmware": FIRMWARE_REVISION,
+            "hardware": HARDWARE_REVISION,
+        }
+        for label, uuid in fields.items():
+            text = await _read_text(client, uuid)
+            if text:
+                info[label] = text
+        return info
+
+    async def _read_battery(self, client: BleakClient) -> int | None:
+        data = await _read(client, BATTERY_LEVEL)
+        if data:
+            return int(data[0])
+        return None
 
 
 def _friendly_error(exc: Exception) -> str:

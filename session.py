@@ -16,12 +16,14 @@ class Metrics:
     power_w: float = 0.0
     speed_kmh: float = 0.0
     cadence_rpm: float = 0.0
+    heart_rate_bpm: float = 0.0
 
     def as_dict(self) -> dict[str, float]:
         return {
             "power_w": round(self.power_w, 1),
             "speed_kmh": round(self.speed_kmh, 1),
             "cadence_rpm": round(self.cadence_rpm, 1),
+            "heart_rate_bpm": round(self.heart_rate_bpm, 1),
         }
 
 
@@ -101,6 +103,7 @@ def build_tcx(
         speed_mps: float,
         power_w: float,
         cadence_rpm: float,
+        heart_rate_bpm: float = 0.0,
     ) -> None:
         point = {
             "time": moment,
@@ -109,6 +112,7 @@ def build_tcx(
             "speed_mps": max(0.0, speed_mps),
             "power_w": max(0.0, power_w),
             "cadence_rpm": max(0.0, cadence_rpm),
+            "heart_rate_bpm": max(0.0, heart_rate_bpm),
         }
         # CSVs record the first sample in the same second as the session
         # start.  Keep one point per timestamp, preferring the later sample.
@@ -120,13 +124,14 @@ def build_tcx(
     # Start at the exact session time with zero load, then replay every
     # recorded sample.  This makes the first and last timestamps line up with
     # the duration shown in the dashboard.
-    add_point(start_text, 0.0, 0.0, 0.0, 0.0, 0.0)
+    add_point(start_text, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0)
     for sample in samples:
         elapsed = _as_float(sample.get("elapsed_s"))
         distance_m = _as_float(sample.get("distance_km")) * 1000.0
         speed_mps = _as_float(sample.get("speed_kmh")) / 3.6
         power_w = _as_float(sample.get("power_w"))
         cadence_rpm = _as_float(sample.get("cadence_rpm"))
+        heart_rate_bpm = _as_float(sample.get("heart_rate_bpm"))
         timestamp = sample.get("timestamp")
         if timestamp:
             moment = _tcx_time(timestamp)
@@ -139,6 +144,7 @@ def build_tcx(
             speed_mps,
             power_w,
             cadence_rpm,
+            heart_rate_bpm,
         )
 
     total_time = max(float(point["elapsed"]) for point in points)
@@ -213,6 +219,17 @@ def build_tcx(
             if lap_cadences
             else 0
         )
+        lap_heart_rates = [
+            float(point["heart_rate_bpm"])
+            for point in points_in_lap
+            if float(point.get("heart_rate_bpm", 0)) > 0
+        ]
+        lap_hr_lines = []
+        if lap_heart_rates:
+            lap_hr_lines = [
+                f"        <AverageHeartRateBpm><Value>{round(sum(lap_heart_rates) / len(lap_heart_rates))}</Value></AverageHeartRateBpm>",
+                f"        <MaximumHeartRateBpm><Value>{round(max(lap_heart_rates))}</Value></MaximumHeartRateBpm>",
+            ]
         lines.extend(
             [
                 f'      <Lap StartTime="{lap_start}">',
@@ -220,6 +237,7 @@ def build_tcx(
                 f"        <DistanceMeters>{lap_distance:.1f}</DistanceMeters>",
                 f"        <MaximumSpeed>{lap_max_speed:.4f}</MaximumSpeed>",
                 f"        <Calories>{lap_calories}</Calories>",
+                *lap_hr_lines,
                 f"        <Cadence>{lap_cadence}</Cadence>",
                 "        <Intensity>Active</Intensity>",
                 "        <TriggerMethod>Manual</TriggerMethod>",
@@ -229,11 +247,24 @@ def build_tcx(
         for point in points_in_lap:
             cadence = max(0, min(255, int(round(float(point["cadence_rpm"])))))
             power = max(0, int(round(float(point["power_w"]))))
+            heart_rate = max(
+                0, min(255, int(round(float(point.get("heart_rate_bpm", 0)))))
+            )
+            hr_lines = (
+                [
+                    "            <HeartRateBpm>",
+                    f"              <Value>{heart_rate}</Value>",
+                    "            </HeartRateBpm>",
+                ]
+                if heart_rate > 0
+                else []
+            )
             lines.extend(
                 [
                     "          <Trackpoint>",
                     f"            <Time>{point['time']}</Time>",
                     f"            <DistanceMeters>{float(point['distance_m']):.1f}</DistanceMeters>",
+                    *hr_lines,
                     f"            <Cadence>{cadence}</Cadence>",
                     "            <Extensions>",
                     '              <TPX xmlns="http://www.garmin.com/xmlschemas/ActivityExtension/v2">',
@@ -302,12 +333,15 @@ class SessionRecorder:
         self.max_power_w = 0.0
         self.max_speed_kmh = 0.0
         self.max_cadence_rpm = 0.0
+        self.max_heart_rate_bpm = 0.0
         self.samples: list[dict[str, object]] = []
         self.workout_laps: list[dict[str, object]] | None = None
         self.finalized_path: Path | None = None
         self._power_integral = 0.0
         self._speed_integral = 0.0
         self._cadence_integral = 0.0
+        self._heart_rate_integral = 0.0
+        self._heart_rate_samples = 0
         self._last_monotonic = time.monotonic()
 
     def add(self, metrics: Metrics) -> None:
@@ -325,6 +359,12 @@ class SessionRecorder:
         self._power_integral += metrics.power_w * dt
         self._speed_integral += metrics.speed_kmh * dt
         self._cadence_integral += metrics.cadence_rpm * dt
+        if metrics.heart_rate_bpm > 0:
+            self._heart_rate_integral += metrics.heart_rate_bpm * dt
+            self._heart_rate_samples += 1
+            self.max_heart_rate_bpm = max(
+                self.max_heart_rate_bpm, metrics.heart_rate_bpm
+            )
 
         self.max_power_w = max(self.max_power_w, metrics.power_w)
         self.max_speed_kmh = max(self.max_speed_kmh, metrics.speed_kmh)
@@ -337,6 +377,7 @@ class SessionRecorder:
                 "power_w": round(metrics.power_w, 1),
                 "speed_kmh": round(metrics.speed_kmh, 1),
                 "cadence_rpm": round(metrics.cadence_rpm, 1),
+                "heart_rate_bpm": round(metrics.heart_rate_bpm, 1),
                 "distance_km": round(self.distance_m / 1000.0, 4),
             }
         )
@@ -350,6 +391,11 @@ class SessionRecorder:
         avg_power = self._power_integral / duration if duration > 0 else 0.0
         avg_speed = self._speed_integral / duration if duration > 0 else 0.0
         avg_cadence = self._cadence_integral / duration if duration > 0 else 0.0
+        avg_heart_rate = (
+            self._heart_rate_integral / self._heart_rate_samples
+            if self._heart_rate_samples > 0
+            else 0.0
+        )
         avg_wkg = avg_power / self.weight_kg if self.weight_kg > 0 else 0.0
         max_wkg = self.max_power_w / self.weight_kg if self.weight_kg > 0 else 0.0
         # Mechanical work in kJ is a good approximation of kcal at ~24%
@@ -364,6 +410,8 @@ class SessionRecorder:
             "max_speed_kmh": round(self.max_speed_kmh, 1),
             "avg_cadence_rpm": round(avg_cadence, 1),
             "max_cadence_rpm": round(self.max_cadence_rpm, 1),
+            "avg_heart_rate_bpm": round(avg_heart_rate, 1),
+            "max_heart_rate_bpm": round(self.max_heart_rate_bpm, 1),
             "weight_kg": round(self.weight_kg, 1),
             "calories_kcal": round(calories_kcal, 1),
             "avg_wkg": round(avg_wkg, 2),
@@ -388,6 +436,7 @@ class SessionRecorder:
                 "power_w",
                 "speed_kmh",
                 "cadence_rpm",
+                "heart_rate_bpm",
                 "distance_km",
             ]
         )
@@ -399,6 +448,7 @@ class SessionRecorder:
                     sample["power_w"],
                     sample["speed_kmh"],
                     sample["cadence_rpm"],
+                    sample.get("heart_rate_bpm", 0),
                     sample["distance_km"],
                 ]
             )

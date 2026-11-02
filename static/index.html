@@ -234,7 +234,7 @@
   /* layout */
   .hero {
     display: grid;
-    grid-template-columns: minmax(0, 1.18fr) minmax(0, 1.22fr) minmax(0, .8fr) minmax(0, .8fr);
+    grid-template-columns: minmax(0, 1.18fr) minmax(0, 1.22fr) minmax(0, .8fr) minmax(0, .8fr) minmax(0, .8fr);
     gap: 16px;
   }
   .main-grid {
@@ -358,6 +358,15 @@
       radial-gradient(380px 200px at 88% -8%, color-mix(in srgb, var(--cadence) 8%, transparent), transparent 66%),
       linear-gradient(180deg, var(--surface), var(--surface-2));
   }
+  .hero .heart {
+    background:
+      radial-gradient(380px 200px at 88% -8%, color-mix(in srgb, var(--danger) 9%, transparent), transparent 66%),
+      linear-gradient(180deg, var(--surface), var(--surface-2));
+  }
+  .hero .heart .big { color: var(--danger); }
+  .hero .heart .big .num { font-size: clamp(44px, 5.2vw, 74px); }
+  .hero .heart .sub { color: var(--muted-2); font: 500 10px/1.4 var(--mono); }
+  .hero .heart .sub strong { color: var(--text); font-weight: 600; }
 
   .zone {
     color: var(--muted-2); border: 1px solid var(--line-soft);
@@ -848,7 +857,7 @@
 
   @media (max-width: 1240px) {
     .app { padding: 20px 24px 52px; }
-    .hero { grid-template-columns: 1.15fr 1.15fr .8fr .8fr; }
+    .hero { grid-template-columns: 1.15fr 1.15fr .8fr .8fr .8fr; }
     .lower-grid { grid-template-columns: minmax(0, 1.2fr) minmax(300px, .8fr); }
     .sessions-card { grid-column: 1 / -1; }
   }
@@ -942,6 +951,12 @@
         <div class="label"><span>Cadenza</span></div>
         <div class="big"><span class="num" id="cadence">0</span><span class="unit">rpm</span></div>
         <div class="mini-chart"><canvas id="cadenceSpark"></canvas></div>
+      </article>
+
+      <article class="card heart">
+        <div class="label"><span>Frequenza cardiaca</span><span id="hrStatus">-</span></div>
+        <div class="big"><span class="num" id="heartRate">--</span><span class="unit">bpm</span></div>
+        <div class="sub"><span id="hrHint">Fascia cardio non connessa</span><span id="hrZone">-</span></div>
       </article>
     </section>
 
@@ -1671,13 +1686,21 @@
       simulating: ["demo", "live"],
       error: ["errore", "err"],
     };
-    const [label, cls] = map[state.status] || [state.status, ""];
+    let [label, cls] = map[state.status] || [state.status, ""];
+    const hrConnected = Boolean(state.hr && state.hr.connected);
+    if (state.status === "idle" && hrConnected) {
+      label = "fascia live";
+      cls = "live";
+    }
     if (cls) pill.classList.add(cls);
     setText("statusText", label);
 
     const simulating = state.mode === "simulate" || state.status === "simulating";
     $("btnScan").classList.toggle("hidden", simulating);
-    $("btnDisconnect").classList.toggle("hidden", simulating || state.status === "idle");
+    $("btnDisconnect").classList.toggle(
+      "hidden",
+      simulating || (state.status === "idle" && !hrConnected)
+    );
   }
 
   function renderControl(state) {
@@ -2498,23 +2521,43 @@
     renderWorkoutState(state);
 
     const device = state.device || {};
+    const hr = state.hr || {};
+    const hrConnected = Boolean(hr.connected);
+    const hrDevice = hr.device || {};
+    const hrName =
+      hrDevice.name && hrDevice.name !== "(senza nome)" ? hrDevice.name : "";
     const name = device.name && device.name !== "(senza nome)" ? device.name : "";
     const maker = device.manufacturer ? `${device.manufacturer} ` : "";
     const serial = device.serial ? ` · #${device.serial}` : "";
     const batt = state.battery != null ? ` · batt ${state.battery}%` : "";
+    const trainerLabel = name
+      ? `${maker}${name}${serial}${batt}`
+      : device.address || "nessun rullo connesso";
     setText(
       "deviceLabel",
-      name ? `${maker}${name}${serial}${batt}` : device.address || "nessun dispositivo connesso"
+      hrConnected
+        ? `${trainerLabel} · fascia: ${hrName || "connessa"}`
+        : trainerLabel
     );
 
     const m = state.metrics || { power_w: 0, speed_kmh: 0, cadence_rpm: 0 };
     const power = Number(m.power_w) || 0;
     const speed = Number(m.speed_kmh) || 0;
     const cadence = Number(m.cadence_rpm) || 0;
+    const heartRate = Number(m.heart_rate_bpm) || 0;
 
     setText("power", String(Math.round(power)));
     setText("speed", speed.toFixed(1).replace(".", ","));
     setText("cadence", String(Math.round(cadence)));
+    setText("heartRate", hrConnected && heartRate > 0 ? String(Math.round(heartRate)) : "--");
+    setText("hrStatus", hrConnected ? "live" : "-");
+    setText(
+      "hrHint",
+      hrConnected
+        ? hrName || hr.detail || "Fascia cardio connessa"
+        : "Fascia cardio non connessa"
+    );
+    setText("hrZone", hrConnected && heartRate > 0 ? "bpm" : "-");
 
     const pct = app.ftp > 0 ? power / app.ftp : 0;
     const zone = zones().find((z) => pct <= z.max) || zones()[zones().length - 1];
@@ -2657,10 +2700,27 @@
         return;
       }
       list.innerHTML = "";
+      const current = app.snapshot || {};
+      const connectedAddresses = new Set(
+        [
+          current.device && current.device.address,
+          current.hr && current.hr.device && current.hr.device.address,
+        ].filter(Boolean)
+      );
       data.devices.forEach((device) => {
         const row = document.createElement("div");
         row.className = "scan-row";
-        const badges = (device.profiles || []).map((p) => `<span class="badge">${p}</span>`).join("");
+        const kindLabels = { trainer: "Rullo", heart_rate: "Fascia cardio", other: "Altro" };
+        const kind = kindLabels[device.kind] || "";
+        const profiles = (device.profiles || []).filter(
+          (profile) => !(device.kind === "heart_rate" && profile === "Heart Rate")
+        );
+        const alreadyConnected = connectedAddresses.has(device.address);
+        const badges = [
+          kind ? `<span class="badge kind">${kind}</span>` : "",
+          ...profiles.map((profile) => `<span class="badge">${escapeHtml(profile)}</span>`),
+          alreadyConnected ? '<span class="badge live">connesso</span>' : "",
+        ].filter(Boolean).join("");
         row.innerHTML = `
           <div>
             <div class="scan-name">${escapeHtml(device.name)}</div>
@@ -2678,12 +2738,13 @@
   async function connectDevice(address) {
     try {
       toast("Connessione in corso…");
-      await api("/api/connect", {
+      const state = await api("/api/connect", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ address }),
       });
-      $("scanSheet").hidden = true;
+      if (state) render(state);
+      toast("Dispositivo connesso. Puoi collegarne un altro dalla stessa lista.");
     } catch (err) {
       toast(err.message, true);
     }
